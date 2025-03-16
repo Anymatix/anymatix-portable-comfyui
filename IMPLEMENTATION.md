@@ -66,8 +66,7 @@ On macOS, downloaded applications are marked with a quarantine attribute (`com.a
 
 1. Check if the quarantine attribute exists on the package directory
 2. If found, attempt to remove it using the `xattr` command
-3. If the user doesn't have sufficient permissions, try again with `sudo`
-4. Provide clear instructions if manual removal is needed
+3. Provide clear instructions if manual removal is needed
 
 This approach ensures that the quarantine attribute is only removed when necessary, avoiding unnecessary operations on subsequent launches.
 

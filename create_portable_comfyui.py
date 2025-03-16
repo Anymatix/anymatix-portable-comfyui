@@ -280,13 +280,13 @@ PORT=${1:-8188}
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # Check if quarantine attribute exists before attempting to remove it
     if xattr -l "$SCRIPT_DIR" 2>/dev/null | grep -q "com.apple.quarantine"; then
-        echo "Quarantine attribute detected. Removing quarantine attribute from files (may require admin password)..."
-        xattr -r -d com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null || sudo xattr -r -d com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null
+        echo "Quarantine attribute detected. Removing quarantine attribute from files..."
+        xattr -r -d com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null
         if [ $? -eq 0 ]; then
             echo "Quarantine attributes removed successfully."
         else
             echo "Warning: Could not remove quarantine attributes. You may need to run this manually:"
-            echo "sudo xattr -r -d com.apple.quarantine \\"$SCRIPT_DIR\\""
+            echo "xattr -r -d com.apple.quarantine \\"$SCRIPT_DIR\\""
         fi
     fi
 fi
