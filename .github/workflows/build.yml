@@ -27,7 +27,7 @@ jobs:
           python create_portable_comfyui.py --ci
           
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: anymatix-portable-comfyui-macos
           path: anymatix-portable-comfyui.zip 
