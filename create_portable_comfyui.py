@@ -190,7 +190,13 @@ def create_zip_package():
             for file in files:
                 file_path = os.path.join(root, file)
                 arcname = os.path.relpath(file_path, os.path.dirname(ANYMATIX_DIR))
-                zipf.write(file_path, arcname)
+                try:
+                    if os.path.exists(file_path):
+                        zipf.write(file_path, arcname)
+                    else:
+                        print(f"Warning: File not found, skipping: {file_path}")
+                except Exception as e:
+                    print(f"Warning: Error adding file to zip: {file_path}, Error: {e}")
 
     print(f"Zip package created successfully: {zip_filename}")
 
