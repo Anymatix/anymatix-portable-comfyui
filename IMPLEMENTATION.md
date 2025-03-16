@@ -9,7 +9,7 @@ The Anymatix Portable ComfyUI package is a self-contained, portable distribution
 1. A portable Python environment with all required dependencies
 2. The ComfyUI repository
 3. Custom node repositories
-4. A launch script
+4. Platform-specific launch scripts (Windows, macOS, Linux)
 
 The package is designed to be platform-independent and can be run on macOS, Windows, and Linux.
 
@@ -45,15 +45,26 @@ The ComfyUI repository is cloned from https://github.com/comfyanonymous/ComfyUI.
 
 Custom node repositories are cloned from the URLs specified in `repos.json`. These repositories contain additional nodes that extend the functionality of ComfyUI.
 
-### Launch Script
+### Launch Scripts
 
-A launch script is created for macOS that:
+Platform-specific launch scripts are created:
 
-1. Changes to the ComfyUI directory
-2. Launches ComfyUI with the portable Python
-3. Passes the appropriate command-line arguments
+1. **macOS**: `anymatix_comfyui_darwin`
+   - Changes to the ComfyUI directory
+   - Launches ComfyUI with the portable Python
+   - Passes the appropriate command-line arguments
 
-The launch script accepts an optional port number as the first argument, defaulting to 8188 if not provided.
+2. **Linux**: `anymatix_comfyui_linux`
+   - Similar to the macOS script but for Linux systems
+
+3. **Windows**: `anymatix_comfyui_windows.bat`
+   - Windows batch file that performs the same functions as the Unix scripts
+
+All launch scripts accept an optional port number as the first argument, defaulting to 8188 if not provided.
+
+### Version Management
+
+The package version is managed using a `VERSION.txt` file in the root of the repository. This file contains a semantic version number (e.g., `0.1.0`) that is used in the zip filename.
 
 ## Building the Package
 
@@ -62,8 +73,8 @@ The package is built using the `create_portable_comfyui.py` script. This script:
 1. Creates the portable Python environment
 2. Clones the ComfyUI repository
 3. Clones the custom node repositories
-4. Creates the launch script
-5. Packages everything into a zip file
+4. Creates platform-specific launch scripts
+5. Packages everything into a zip file with version and architecture information
 
 The script can be run locally or on GitHub CI.
 
@@ -79,7 +90,7 @@ python create_portable_comfyui.py --local
 
 The package is also built on GitHub CI using the workflow defined in `.github/workflows/build.yml`. This workflow:
 
-1. Runs on macOS
+1. Runs on multiple platforms (macOS, Windows, Linux)
 2. Sets up Python
 3. Runs the `create_portable_comfyui.py` script with the `--ci` flag
 4. Uploads the resulting zip file as an artifact
@@ -119,15 +130,31 @@ python github_automation.py --workflow build.yml --branch main --output-dir ./ar
 
 To use the package:
 
-1. Download the zip file
+1. Download the appropriate zip file for your platform
 2. Extract it to a directory of your choice
-3. Run the `anymatix_comfyui_macos` script
+3. Run the appropriate launch script for your platform:
+   - macOS: `anymatix_comfyui_darwin`
+   - Linux: `anymatix_comfyui_linux`
+   - Windows: `anymatix_comfyui_windows.bat`
 
 The script will launch ComfyUI with the portable Python and the appropriate command-line arguments.
 
+## Zip File Naming Convention
+
+The zip files are named according to the following convention:
+
+```
+anymatix-portable-comfyui-{platform}-{architecture}-v{version}.zip
+```
+
+For example:
+- `anymatix-portable-comfyui-darwin-arm64-v0.1.0.zip` for macOS on Apple Silicon
+- `anymatix-portable-comfyui-windows-x64-v0.1.0.zip` for Windows on x64
+- `anymatix-portable-comfyui-linux-x64-v0.1.0.zip` for Linux on x64
+
 ## Future Improvements
 
-- Add support for Windows and Linux launch scripts
 - Add more custom node repositories
 - Improve error handling in the build script
-- Add a GUI launcher 
+- Add a GUI launcher
+- Add automated testing of the built packages 

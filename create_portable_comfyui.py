@@ -5,7 +5,7 @@ This script will:
 1. Create a portable Python environment
 2. Clone the ComfyUI repository
 3. Clone the custom node repositories
-4. Create a launch script
+4. Create a launch script (platform-specific)
 5. Package everything into a zip file
 6. Optionally push changes to GitHub and trigger workflows
 """
@@ -18,6 +18,7 @@ import argparse
 import urllib.request
 import zipfile
 import sys
+import shutil
 
 # Constants
 ANYMATIX_DIR = "anymatix"
@@ -44,23 +45,48 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_miniforge_url():
-    """Get the URL for the Miniforge installer based on the current platform."""
+def get_version():
+    """Get the version from VERSION.txt."""
+    with open("VERSION.txt", "r") as f:
+        return f.read().strip()
+
+
+def get_platform_info():
+    """Get platform information."""
     system = platform.system().lower()
     machine = platform.machine().lower()
 
+    # Map machine architecture to a more user-friendly name
+    arch_map = {
+        "x86_64": "x64",
+        "amd64": "x64",
+        "i386": "x86",
+        "i686": "x86",
+        "arm64": "arm64",
+        "aarch64": "arm64",
+    }
+
+    arch = arch_map.get(machine, machine)
+
+    return system, arch
+
+
+def get_miniforge_url():
+    """Get the URL for the Miniforge installer based on the current platform."""
+    system, machine = get_platform_info()
+
     if system == "darwin":
-        if machine == "x86_64":
+        if machine == "x64":
             return f"{MINIFORGE_BASE_URL}/Miniforge3-MacOSX-x86_64.sh"
         elif machine == "arm64":
             return f"{MINIFORGE_BASE_URL}/Miniforge3-MacOSX-arm64.sh"
     elif system == "linux":
-        if machine == "x86_64":
+        if machine == "x64":
             return f"{MINIFORGE_BASE_URL}/Miniforge3-Linux-x86_64.sh"
-        elif machine == "aarch64":
+        elif machine == "arm64":
             return f"{MINIFORGE_BASE_URL}/Miniforge3-Linux-aarch64.sh"
     elif system == "windows":
-        if machine == "amd64":
+        if machine == "x64":
             return f"{MINIFORGE_BASE_URL}/Miniforge3-Windows-x86_64.exe"
 
     raise ValueError(f"Unsupported platform: {system} {machine}")
@@ -178,15 +204,17 @@ def clone_custom_nodes():
 
 
 def create_launch_script():
-    """Create the launch script."""
-    print("Creating launch script...")
+    """Create platform-specific launch scripts."""
+    print("Creating launch scripts...")
+    system, _ = get_platform_info()
 
     # Create the launch script for macOS
-    launch_script_path = os.path.join(ANYMATIX_DIR, "anymatix_comfyui_macos")
+    if system == "darwin" or system == "linux":
+        launch_script_path = os.path.join(ANYMATIX_DIR, f"anymatix_comfyui_{system}")
 
-    with open(launch_script_path, "w") as f:
-        f.write(
-            """#!/bin/bash
+        with open(launch_script_path, "w") as f:
+            f.write(
+                """#!/bin/bash
 # Launch script for ComfyUI
 
 # Get the directory where this script is located
@@ -206,19 +234,56 @@ cd "$SCRIPT_DIR/ComfyUI"
     --preview-method=none \\
     --port=$PORT
 """
-        )
+            )
 
-    # Make the launch script executable
-    os.chmod(launch_script_path, 0o755)
+        # Make the launch script executable
+        os.chmod(launch_script_path, 0o755)
 
-    print("Launch script created successfully.")
+    # Create the launch script for Windows
+    if system == "windows":
+        launch_script_path = os.path.join(ANYMATIX_DIR, "anymatix_comfyui_windows.bat")
+
+        with open(launch_script_path, "w") as f:
+            f.write(
+                """@echo off
+REM Launch script for ComfyUI
+
+REM Get the directory where this script is located
+set SCRIPT_DIR=%~dp0
+
+REM Default port
+if "%1"=="" (
+    set PORT=8188
+) else (
+    set PORT=%1
+)
+
+REM Change to the ComfyUI directory
+cd "%SCRIPT_DIR%ComfyUI"
+
+REM Launch ComfyUI with the portable Python
+"%SCRIPT_DIR%python\\python.exe" main.py ^
+    --enable-cors-header ^
+    "*" ^
+    --force-fp16 ^
+    --preview-method=none ^
+    --port=%PORT%
+"""
+            )
+
+    print("Launch scripts created successfully.")
 
 
 def create_zip_package():
     """Create a zip package of the portable ComfyUI."""
     print("Creating zip package...")
 
-    zip_filename = "anymatix-portable-comfyui.zip"
+    # Get version and platform info
+    version = get_version()
+    system, arch = get_platform_info()
+
+    # Create zip filename with version and architecture
+    zip_filename = f"anymatix-portable-comfyui-{system}-{arch}-v{version}.zip"
 
     with zipfile.ZipFile(zip_filename, "w", zipfile.ZIP_DEFLATED) as zipf:
         for root, _, files in os.walk(ANYMATIX_DIR):
@@ -234,6 +299,7 @@ def create_zip_package():
                     print(f"Warning: Error adding file to zip: {file_path}, Error: {e}")
 
     print(f"Zip package created successfully: {zip_filename}")
+    return zip_filename
 
 
 def push_to_github(branch):
@@ -284,7 +350,14 @@ def main():
     create_launch_script()
 
     # Create zip package
-    create_zip_package()
+    zip_filename = create_zip_package()
+
+    # If we're on CI, rename the zip file to a standard name for the artifact
+    if args.ci:
+        system, arch = get_platform_info()
+        standard_name = f"anymatix-portable-comfyui.zip"
+        shutil.copy(zip_filename, standard_name)
+        print(f"Created standardized zip file for CI: {standard_name}")
 
     # Push to GitHub if requested
     if args.push:
