@@ -73,6 +73,37 @@ The package is also built on GitHub CI using the workflow defined in `.github/wo
 3. Runs the `create_portable_comfyui.py` script with the `--ci` flag
 4. Uploads the resulting zip file as an artifact
 
+## GitHub Automation
+
+The project includes automation for GitHub operations:
+
+### create_portable_comfyui.py
+
+The main script has been extended with options to:
+
+- Push changes to GitHub (`--push`)
+- Trigger GitHub workflows (`--trigger-workflow`)
+
+Example usage:
+
+```bash
+python create_portable_comfyui.py --local --push --trigger-workflow
+```
+
+### github_automation.py
+
+A dedicated script for GitHub workflow automation that:
+
+1. Triggers a workflow run
+2. Monitors the workflow status
+3. Downloads the artifacts when the workflow completes
+
+Example usage:
+
+```bash
+python github_automation.py --workflow build.yml --branch main --output-dir ./artifacts
+```
+
 ## Usage
 
 To use the package:
