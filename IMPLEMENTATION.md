@@ -26,6 +26,17 @@ The portable Python environment is created using Miniforge, a minimal installer 
 
 The Python environment includes all the packages listed in `requirements.txt`.
 
+### Apple Silicon Optimization
+
+For macOS with Apple Silicon (M1/M2/M3), the Python environment is specially optimized:
+
+- NumPy is configured to use the Apple Accelerate framework via the `libblas=*=*accelerate` package, which provides significant performance improvements for linear algebra operations
+- The `libblas` package is pinned to ensure it always uses the Accelerate framework
+- PyTorch is installed with MPS (Metal Performance Shaders) support, enabling GPU acceleration on Apple Silicon
+- The installation process is customized to ensure these optimizations are properly applied
+
+These optimizations result in better performance for tensor operations and neural network inference on Apple Silicon Macs.
+
 ### ComfyUI Repository
 
 The ComfyUI repository is cloned from https://github.com/comfyanonymous/ComfyUI.git. This repository contains the core ComfyUI application.

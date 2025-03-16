@@ -39,3 +39,5 @@ The port can be the optional first argument of the launch script and default to 
 14) always use a web search if you are unsure or your knowledge cutoff is too old
 
 15) automatize all the steps that you can including pushing this repo (folder name is appropriate) to github in my place and if you can use github command line to launch workflow and retrieve logs and assets for testing yourself, ask for a github key if you need it and provide a link to fetch the key
+
+16) for macOS, ensure the Python environment is optimized for Apple Silicon (M1/M2/M3) by using appropriate versions of NumPy (with Accelerate framework) and PyTorch (with MPS support) to maximize performance on these platforms

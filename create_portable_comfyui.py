@@ -107,7 +107,42 @@ def create_portable_python():
     if platform.system() == "Windows":
         pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
 
-    subprocess.run([pip_exe, "install", "-r", "requirements.txt"], check=True)
+    # For macOS with Apple Silicon, optimize NumPy with Accelerate framework
+    if platform.system() == "darwin" and platform.machine() == "arm64":
+        print("Optimizing for Apple Silicon...")
+        # Install NumPy with Accelerate framework
+        subprocess.run(
+            [conda_exe, "install", "-y", "-c", "conda-forge", "libblas=*=*accelerate"],
+            check=True,
+        )
+        # Pin libblas to use accelerate
+        conda_meta_dir = os.path.join(PYTHON_DIR, "conda-meta")
+        os.makedirs(conda_meta_dir, exist_ok=True)
+        with open(os.path.join(conda_meta_dir, "pinned"), "a") as f:
+            f.write("libblas=*=*accelerate\n")
+
+        # Install PyTorch with MPS support
+        subprocess.run(
+            [pip_exe, "install", "torch>=2.1.0", "torchvision", "torchaudio"],
+            check=True,
+        )
+
+        # Install other requirements
+        with open("requirements.txt", "r") as f:
+            requirements = f.read().splitlines()
+
+        # Filter out torch, torchvision, torchaudio as they're already installed
+        filtered_requirements = [
+            req
+            for req in requirements
+            if not req.startswith(("torch", "torchvision", "torchaudio", "#"))
+        ]
+
+        if filtered_requirements:
+            subprocess.run([pip_exe, "install"] + filtered_requirements, check=True)
+    else:
+        # For other platforms, install all requirements normally
+        subprocess.run([pip_exe, "install", "-r", "requirements.txt"], check=True)
 
     print("Portable Python environment created successfully.")
 
