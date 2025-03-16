@@ -7,6 +7,7 @@ This script will:
 3. Clone the custom node repositories
 4. Create a launch script
 5. Package everything into a zip file
+6. Optionally push changes to GitHub and trigger workflows
 """
 
 import os
@@ -16,6 +17,7 @@ import platform
 import argparse
 import urllib.request
 import zipfile
+import sys
 
 # Constants
 ANYMATIX_DIR = "anymatix"
@@ -33,6 +35,12 @@ def parse_args():
         "--local", action="store_true", help="Create the package locally"
     )
     parser.add_argument("--ci", action="store_true", help="Create the package on CI")
+    parser.add_argument("--push", action="store_true", help="Push changes to GitHub")
+    parser.add_argument(
+        "--trigger-workflow", action="store_true", help="Trigger GitHub workflow"
+    )
+    parser.add_argument("--workflow", default="build.yml", help="Workflow file name")
+    parser.add_argument("--branch", default="main", help="Branch to push to")
     return parser.parse_args()
 
 
@@ -187,10 +195,37 @@ def create_zip_package():
     print(f"Zip package created successfully: {zip_filename}")
 
 
+def push_to_github(branch):
+    """Push changes to GitHub."""
+    print(f"Pushing changes to GitHub branch {branch}...")
+
+    # Add all files
+    subprocess.run(["git", "add", "."], check=True)
+
+    # Commit changes
+    subprocess.run(
+        ["git", "commit", "-m", "Update portable ComfyUI package"], check=True
+    )
+
+    # Push to GitHub
+    subprocess.run(["git", "push", "origin", branch], check=True)
+
+    print("Changes pushed to GitHub successfully.")
+
+
+def trigger_github_workflow(workflow, branch):
+    """Trigger a GitHub workflow."""
+    print(f"Triggering GitHub workflow {workflow} on branch {branch}...")
+
+    # Trigger workflow
+    subprocess.run(["gh", "workflow", "run", workflow, "--ref", branch], check=True)
+
+    print("GitHub workflow triggered successfully.")
+
+
 def main():
     """Main function."""
-    # Parse arguments but we don't need to use them for now
-    parse_args()
+    args = parse_args()
 
     # Create anymatix directory
     os.makedirs(ANYMATIX_DIR, exist_ok=True)
@@ -209,6 +244,14 @@ def main():
 
     # Create zip package
     create_zip_package()
+
+    # Push to GitHub if requested
+    if args.push:
+        push_to_github(args.branch)
+
+    # Trigger GitHub workflow if requested
+    if args.trigger_workflow:
+        trigger_github_workflow(args.workflow, args.branch)
 
     print("Portable ComfyUI package created successfully.")
 
