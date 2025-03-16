@@ -96,32 +96,34 @@ jobs:
   #         name: anymatix-portable-comfyui-linux
   #         path: ${{ steps.get-zip-filename.outputs.ZIP_FILE }}
 
-  # create-release:
-  #   needs: [build-macos, build-windows]
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v3
+  create-release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
       
-  #     - name: Get version
-  #       id: get-version
-  #       run: |
-  #         echo "VERSION=$(cat VERSION.txt)" >> $GITHUB_OUTPUT
+      - name: Get version
+        id: get-version
+        run: |
+          echo "VERSION=$(cat VERSION.txt | tr -d ' %')" >> $GITHUB_OUTPUT
           
-  #     - name: Download all artifacts
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         path: artifacts
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
           
-  #     - name: Create Release
-  #       id: create-release
-  #       uses: softprops/action-gh-release@v1
-  #       with:
-  #         name: v${{ steps.get-version.outputs.VERSION }}
-  #         tag_name: v${{ steps.get-version.outputs.VERSION }}
-  #         draft: false
-  #         prerelease: false
-  #         files: |
-  #           artifacts/anymatix-portable-comfyui-macos/*
-  #           artifacts/anymatix-portable-comfyui-windows/*
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+      - name: Create Release
+        id: create-release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: v${{ steps.get-version.outputs.VERSION }}
+          tag_name: v${{ steps.get-version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/anymatix-portable-comfyui-macos/*
+            artifacts/anymatix-portable-comfyui-windows/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
