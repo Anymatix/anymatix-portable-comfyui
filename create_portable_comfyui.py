@@ -262,7 +262,53 @@ def create_launch_script() -> None:
     system, _ = get_platform_info()
 
     # Create the launch script for macOS
-    if system == "darwin" or system == "linux":
+    if system == "darwin":
+        launch_script_path = os.path.join(ANYMATIX_DIR, f"anymatix_comfyui_{system}")
+
+        with open(launch_script_path, "w") as f:
+            f.write(
+                """#!/bin/bash
+# Launch script for ComfyUI
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Default port
+PORT=${1:-8188}
+
+# Remove quarantine attribute if present (macOS security feature)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # Check if quarantine attribute exists before attempting to remove it
+    if xattr -l "$SCRIPT_DIR" 2>/dev/null | grep -q "com.apple.quarantine"; then
+        echo "Quarantine attribute detected. Removing quarantine attribute from files (may require admin password)..."
+        xattr -r -d com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null || sudo xattr -r -d com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "Quarantine attributes removed successfully."
+        else
+            echo "Warning: Could not remove quarantine attributes. You may need to run this manually:"
+            echo "sudo xattr -r -d com.apple.quarantine \\"$SCRIPT_DIR\\""
+        fi
+    fi
+fi
+
+# Change to the ComfyUI directory
+cd "$SCRIPT_DIR/ComfyUI"
+
+# Launch ComfyUI with the portable Python
+"$SCRIPT_DIR/python/bin/python" main.py \\
+    --enable-cors-header \\
+    "*" \\
+    --force-fp16 \\
+    --preview-method=none \\
+    --port=$PORT
+"""
+            )
+
+        # Make the launch script executable
+        os.chmod(launch_script_path, 0o755)
+
+    # Create the launch script for Linux
+    elif system == "linux":
         launch_script_path = os.path.join(ANYMATIX_DIR, f"anymatix_comfyui_{system}")
 
         with open(launch_script_path, "w") as f:
@@ -293,7 +339,7 @@ cd "$SCRIPT_DIR/ComfyUI"
         os.chmod(launch_script_path, 0o755)
 
     # Create the launch script for Windows
-    if system == "windows":
+    elif system == "windows":
         launch_script_path = os.path.join(ANYMATIX_DIR, "anymatix_comfyui_windows.bat")
 
         with open(launch_script_path, "w") as f:

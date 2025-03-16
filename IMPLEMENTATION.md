@@ -9,9 +9,9 @@ The Anymatix Portable ComfyUI package is a self-contained, portable distribution
 1. A portable Python environment with all required dependencies
 2. The ComfyUI repository
 3. Custom node repositories
-4. Platform-specific launch scripts (Windows, macOS, Linux)
+4. Platform-specific launch scripts (Windows, macOS)
 
-The package is designed to be platform-independent and can be run on macOS, Windows, and Linux.
+The package is designed to be platform-independent and can be run on macOS and Windows.
 
 ## Implementation Details
 
@@ -51,20 +51,29 @@ Platform-specific launch scripts are created:
 
 1. **macOS**: `anymatix_comfyui_darwin`
    - Changes to the ComfyUI directory
+   - Checks for and removes the quarantine attribute if present
    - Launches ComfyUI with the portable Python
    - Passes the appropriate command-line arguments
 
-2. **Linux**: `anymatix_comfyui_linux`
-   - Similar to the macOS script but for Linux systems
-
-3. **Windows**: `anymatix_comfyui_windows.bat`
+2. **Windows**: `anymatix_comfyui_windows.bat`
    - Windows batch file that performs the same functions as the Unix scripts
 
 All launch scripts accept an optional port number as the first argument, defaulting to 8188 if not provided.
 
+#### macOS Quarantine Handling
+
+On macOS, downloaded applications are marked with a quarantine attribute (`com.apple.quarantine`) as a security measure. This can prevent the portable ComfyUI package from running properly. The macOS launch script includes logic to:
+
+1. Check if the quarantine attribute exists on the package directory
+2. If found, attempt to remove it using the `xattr` command
+3. If the user doesn't have sufficient permissions, try again with `sudo`
+4. Provide clear instructions if manual removal is needed
+
+This approach ensures that the quarantine attribute is only removed when necessary, avoiding unnecessary operations on subsequent launches.
+
 ### Version Management
 
-The package version is managed using a `VERSION.txt` file in the root of the repository. This file contains a semantic version number (e.g., `0.1.0`) that is used in the zip filename.
+The package version is managed using a `VERSION.txt` file in the root of the repository. This file contains a semantic version number (currently `1.0.0`) that is used in the zip filename and for GitHub releases.
 
 ## Building the Package
 
@@ -90,10 +99,11 @@ python create_portable_comfyui.py --local
 
 The package is also built on GitHub CI using the workflow defined in `.github/workflows/build.yml`. This workflow:
 
-1. Runs on multiple platforms (macOS, Windows, Linux)
+1. Runs on multiple platforms (macOS, Windows)
 2. Sets up Python
 3. Runs the `create_portable_comfyui.py` script with the `--ci` flag
 4. Uploads the resulting zip file as an artifact
+5. Creates a GitHub release with the platform-specific zip files
 
 ## GitHub Automation
 
@@ -134,7 +144,6 @@ To use the package:
 2. Extract it to a directory of your choice
 3. Run the appropriate launch script for your platform:
    - macOS: `anymatix_comfyui_darwin`
-   - Linux: `anymatix_comfyui_linux`
    - Windows: `anymatix_comfyui_windows.bat`
 
 The script will launch ComfyUI with the portable Python and the appropriate command-line arguments.
@@ -148,9 +157,8 @@ anymatix-portable-comfyui-{platform}-{architecture}-v{version}.zip
 ```
 
 For example:
-- `anymatix-portable-comfyui-darwin-arm64-v0.1.0.zip` for macOS on Apple Silicon
-- `anymatix-portable-comfyui-windows-x64-v0.1.0.zip` for Windows on x64
-- `anymatix-portable-comfyui-linux-x64-v0.1.0.zip` for Linux on x64
+- `anymatix-portable-comfyui-darwin-arm64-v1.0.0.zip` for macOS on Apple Silicon
+- `anymatix-portable-comfyui-windows-x64-v1.0.0.zip` for Windows on x64
 
 ## Future Improvements
 
