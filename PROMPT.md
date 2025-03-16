@@ -1,6 +1,6 @@
 In this folder, please create a method to create a portable, .zip file that uncompressed to a directory named anymatix. This directory will have two subdirectories:
 
-1) a fully self-contained python installation, portable, for now for macos, then also for windows and linux (but later, when I will change these instructions). The installation will contain the packages listed in requirements.txt. 
+1) a fully self-contained python installation, portable, for macos, windows and linux (but later, when I will change these instructions). The installation will contain the packages listed in requirements.txt. 
 
 2) a clone of the repository https://github.com/comfyanonymous/ComfyUI
 
@@ -41,3 +41,9 @@ The port can be the optional first argument of the launch script and default to 
 15) automatize all the steps that you can including pushing this repo (folder name is appropriate) to github in my place and if you can use github command line to launch workflow and retrieve logs and assets for testing yourself, ask for a github key if you need it and provide a link to fetch the key
 
 16) for macOS, ensure the Python environment is optimized for Apple Silicon (M1/M2/M3) by using appropriate versions of NumPy (with Accelerate framework) and PyTorch (with MPS support) to maximize performance on these platforms
+
+17) the zip file name must contain the architecture and version number. 
+
+18) The version number should be taken from a file named VERSION.txt, initially containing a suitable version number for an initial release, using semantic versioning.  
+
+19) The workflow should create a GitHub release with the version number from VERSION.txt and upload the platform-specific zip files as separate assets of this single release.  

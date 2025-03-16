@@ -405,9 +405,9 @@ def main() -> None:
 
     # If we're on CI, rename the zip file to a standard name for the artifact
     if args.ci:
-        standard_name = "anymatix-portable-comfyui.zip"
-        shutil.copy(zip_filename, standard_name)
-        print(f"Created standardized zip file for CI: {standard_name}")
+        # Keep the original filename with version and platform info
+        # No need to rename to a generic name anymore
+        print(f"Using versioned zip file for CI: {zip_filename}")
 
     # Push to GitHub if requested
     if args.push:

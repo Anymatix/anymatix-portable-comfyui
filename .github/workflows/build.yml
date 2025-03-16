@@ -26,11 +26,16 @@ jobs:
         run: |
           python create_portable_comfyui.py --ci
           
+      - name: Get zip filename
+        id: get-zip-filename
+        run: |
+          echo "ZIP_FILE=$(ls anymatix-portable-comfyui-darwin-*.zip)" >> $GITHUB_OUTPUT
+          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: anymatix-portable-comfyui-macos
-          path: anymatix-portable-comfyui.zip
+          path: ${{ steps.get-zip-filename.outputs.ZIP_FILE }}
 
   build-windows:
     runs-on: windows-latest
@@ -50,11 +55,16 @@ jobs:
         run: |
           python create_portable_comfyui.py --ci
           
+      - name: Get zip filename
+        id: get-zip-filename
+        run: |
+          echo "ZIP_FILE=$(Get-ChildItem -Path anymatix-portable-comfyui-windows-*.zip | Select-Object -ExpandProperty Name)" >> $env:GITHUB_OUTPUT
+          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: anymatix-portable-comfyui-windows
-          path: anymatix-portable-comfyui.zip
+          path: ${{ steps.get-zip-filename.outputs.ZIP_FILE }}
 
   build-linux:
     runs-on: ubuntu-latest
@@ -74,8 +84,44 @@ jobs:
         run: |
           python create_portable_comfyui.py --ci
           
+      - name: Get zip filename
+        id: get-zip-filename
+        run: |
+          echo "ZIP_FILE=$(ls anymatix-portable-comfyui-linux-*.zip)" >> $GITHUB_OUTPUT
+          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: anymatix-portable-comfyui-linux
-          path: anymatix-portable-comfyui.zip 
+          path: ${{ steps.get-zip-filename.outputs.ZIP_FILE }}
+
+  create-release:
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Get version
+        id: get-version
+        run: |
+          echo "VERSION=$(cat VERSION.txt)" >> $GITHUB_OUTPUT
+          
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: Create Release
+        id: create-release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: v${{ steps.get-version.outputs.VERSION }}
+          tag_name: v${{ steps.get-version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/anymatix-portable-comfyui-macos/*
+            artifacts/anymatix-portable-comfyui-windows/*
+            artifacts/anymatix-portable-comfyui-linux/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
