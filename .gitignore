@@ -17,3 +17,7 @@ venv.bak/
 .DS_Store
 node_modules/
 *.zip 
+test
+anymatix-portable-comfyui.zip 
+artifacts 
+test
