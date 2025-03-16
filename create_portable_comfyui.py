@@ -19,6 +19,8 @@ import urllib.request
 import zipfile
 import sys
 import shutil
+import time
+from typing import List, Optional, Dict, Any, Union
 
 # Constants
 ANYMATIX_DIR = "anymatix"
@@ -29,7 +31,7 @@ COMFYUI_REPO = "https://github.com/comfyanonymous/ComfyUI.git"
 MINIFORGE_BASE_URL = "https://github.com/conda-forge/miniforge/releases/latest/download"
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Create a portable ComfyUI package")
     parser.add_argument(
@@ -45,13 +47,13 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_version():
+def get_version() -> str:
     """Get the version from VERSION.txt."""
     with open("VERSION.txt", "r") as f:
         return f.read().strip()
 
 
-def get_platform_info():
+def get_platform_info() -> tuple[str, str]:
     """Get platform information."""
     system = platform.system().lower()
     machine = platform.machine().lower()
@@ -71,7 +73,7 @@ def get_platform_info():
     return system, arch
 
 
-def get_miniforge_url():
+def get_miniforge_url() -> str:
     """Get the URL for the Miniforge installer based on the current platform."""
     system, machine = get_platform_info()
 
@@ -92,7 +94,30 @@ def get_miniforge_url():
     raise ValueError(f"Unsupported platform: {system} {machine}")
 
 
-def create_portable_python():
+def run_command(
+    cmd: List[str], check: bool = True, shell: bool = False
+) -> subprocess.CompletedProcess:
+    """Run a command and handle errors."""
+    try:
+        return subprocess.run(
+            cmd,
+            check=check,
+            shell=shell,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed: {' '.join(cmd)}")
+        print(f"Error: {e}")
+        print(f"Output: {e.stdout if hasattr(e, 'stdout') else ''}")
+        print(f"Error output: {e.stderr if hasattr(e, 'stderr') else ''}")
+        if check:
+            raise
+        return e
+
+
+def create_portable_python() -> None:
     """Create a portable Python environment using Miniforge."""
     print("Creating portable Python environment...")
 
@@ -110,77 +135,105 @@ def create_portable_python():
     # Install Miniforge
     print("Installing Miniforge...")
     if platform.system() == "Windows":
-        subprocess.run(
-            [miniforge_installer, "/S", "/D=" + os.path.abspath(PYTHON_DIR)], check=True
-        )
+        # For Windows, use a more robust installation approach
+        install_cmd = [miniforge_installer, "/S", "/D=" + os.path.abspath(PYTHON_DIR)]
+        run_command(install_cmd)
+
+        # Wait for installation to complete
+        print("Waiting for installation to complete...")
+        time.sleep(10)
     else:
-        subprocess.run([f"./{miniforge_installer}", "-b", "-p", PYTHON_DIR], check=True)
+        run_command([f"./{miniforge_installer}", "-b", "-p", PYTHON_DIR])
 
     # Clean up installer
     os.remove(miniforge_installer)
 
     # Install required packages
     print("Installing required packages...")
-    conda_exe = os.path.join(PYTHON_DIR, "bin", "conda")
+
     if platform.system() == "Windows":
+        # On Windows, use a different approach to run conda
         conda_exe = os.path.join(PYTHON_DIR, "Scripts", "conda.exe")
 
-    # Create a new environment in the portable Python
-    subprocess.run([conda_exe, "install", "-y", "python=3.10"], check=True)
+        # Initialize conda for batch usage
+        print("Initializing conda...")
+        run_command([conda_exe, "init", "cmd.exe"], check=False)
 
-    # Install pip packages from requirements.txt
-    pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
-    if platform.system() == "Windows":
-        pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
+        # Create a batch file to run conda commands
+        batch_file = "run_conda_install.bat"
+        with open(batch_file, "w") as f:
+            f.write(f"@echo off\n")
+            f.write(f"call {os.path.join(PYTHON_DIR, 'Scripts', 'activate.bat')}\n")
+            f.write(f"conda install -y python=3.10\n")
+            f.write(f"pip install -r requirements.txt\n")
 
-    # For macOS with Apple Silicon, optimize NumPy with Accelerate framework
-    if platform.system() == "darwin" and platform.machine() == "arm64":
-        print("Optimizing for Apple Silicon...")
-        # Install NumPy with Accelerate framework
-        subprocess.run(
-            [conda_exe, "install", "-y", "-c", "conda-forge", "libblas=*=*accelerate"],
-            check=True,
-        )
-        # Pin libblas to use accelerate
-        conda_meta_dir = os.path.join(PYTHON_DIR, "conda-meta")
-        os.makedirs(conda_meta_dir, exist_ok=True)
-        with open(os.path.join(conda_meta_dir, "pinned"), "a") as f:
-            f.write("libblas=*=*accelerate\n")
+        # Run the batch file
+        print("Running conda installation...")
+        run_command(["cmd.exe", "/c", batch_file], shell=True)
 
-        # Install PyTorch with MPS support
-        subprocess.run(
-            [pip_exe, "install", "torch>=2.1.0", "torchvision", "torchaudio"],
-            check=True,
-        )
-
-        # Install other requirements
-        with open("requirements.txt", "r") as f:
-            requirements = f.read().splitlines()
-
-        # Filter out torch, torchvision, torchaudio as they're already installed
-        filtered_requirements = [
-            req
-            for req in requirements
-            if not req.startswith(("torch", "torchvision", "torchaudio", "#"))
-        ]
-
-        if filtered_requirements:
-            subprocess.run([pip_exe, "install"] + filtered_requirements, check=True)
+        # Clean up
+        os.remove(batch_file)
     else:
-        # For other platforms, install all requirements normally
-        subprocess.run([pip_exe, "install", "-r", "requirements.txt"], check=True)
+        # For Unix-like systems, use the original approach
+        conda_exe = os.path.join(PYTHON_DIR, "bin", "conda")
+        run_command([conda_exe, "install", "-y", "python=3.10"])
+
+        pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
+
+        # For macOS with Apple Silicon, optimize NumPy with Accelerate framework
+        if platform.system() == "darwin" and platform.machine() == "arm64":
+            print("Optimizing for Apple Silicon...")
+            # Install NumPy with Accelerate framework
+            run_command(
+                [
+                    conda_exe,
+                    "install",
+                    "-y",
+                    "-c",
+                    "conda-forge",
+                    "libblas=*=*accelerate",
+                ]
+            )
+
+            # Pin libblas to use accelerate
+            conda_meta_dir = os.path.join(PYTHON_DIR, "conda-meta")
+            os.makedirs(conda_meta_dir, exist_ok=True)
+            with open(os.path.join(conda_meta_dir, "pinned"), "a") as f:
+                f.write("libblas=*=*accelerate\n")
+
+            # Install PyTorch with MPS support
+            run_command(
+                [pip_exe, "install", "torch>=2.1.0", "torchvision", "torchaudio"]
+            )
+
+            # Install other requirements
+            with open("requirements.txt", "r") as f:
+                requirements = f.read().splitlines()
+
+            # Filter out torch, torchvision, torchaudio as they're already installed
+            filtered_requirements = [
+                req
+                for req in requirements
+                if not req.startswith(("torch", "torchvision", "torchaudio", "#"))
+            ]
+
+            if filtered_requirements:
+                run_command([pip_exe, "install"] + filtered_requirements)
+        else:
+            # For other platforms, install all requirements normally
+            run_command([pip_exe, "install", "-r", "requirements.txt"])
 
     print("Portable Python environment created successfully.")
 
 
-def clone_comfyui():
+def clone_comfyui() -> None:
     """Clone the ComfyUI repository."""
     print("Cloning ComfyUI repository...")
-    subprocess.run(["git", "clone", COMFYUI_REPO, COMFYUI_DIR], check=True)
+    run_command(["git", "clone", COMFYUI_REPO, COMFYUI_DIR])
     print("ComfyUI repository cloned successfully.")
 
 
-def clone_custom_nodes():
+def clone_custom_nodes() -> None:
     """Clone the custom node repositories."""
     print("Cloning custom node repositories...")
 
@@ -198,12 +251,12 @@ def clone_custom_nodes():
         repo_dir = os.path.join(CUSTOM_NODES_DIR, repo_name)
 
         print(f"Cloning {repo_url}...")
-        subprocess.run(["git", "clone", repo_url, repo_dir], check=True)
+        run_command(["git", "clone", repo_url, repo_dir])
 
     print("Custom node repositories cloned successfully.")
 
 
-def create_launch_script():
+def create_launch_script() -> None:
     """Create platform-specific launch scripts."""
     print("Creating launch scripts...")
     system, _ = get_platform_info()
@@ -274,7 +327,7 @@ REM Launch ComfyUI with the portable Python
     print("Launch scripts created successfully.")
 
 
-def create_zip_package():
+def create_zip_package() -> str:
     """Create a zip package of the portable ComfyUI."""
     print("Creating zip package...")
 
@@ -302,35 +355,33 @@ def create_zip_package():
     return zip_filename
 
 
-def push_to_github(branch):
+def push_to_github(branch: str) -> None:
     """Push changes to GitHub."""
     print(f"Pushing changes to GitHub branch {branch}...")
 
     # Add all files
-    subprocess.run(["git", "add", "."], check=True)
+    run_command(["git", "add", "."])
 
     # Commit changes
-    subprocess.run(
-        ["git", "commit", "-m", "Update portable ComfyUI package"], check=True
-    )
+    run_command(["git", "commit", "-m", "Update portable ComfyUI package"])
 
     # Push to GitHub
-    subprocess.run(["git", "push", "origin", branch], check=True)
+    run_command(["git", "push", "origin", branch])
 
     print("Changes pushed to GitHub successfully.")
 
 
-def trigger_github_workflow(workflow, branch):
+def trigger_github_workflow(workflow: str, branch: str) -> None:
     """Trigger a GitHub workflow."""
     print(f"Triggering GitHub workflow {workflow} on branch {branch}...")
 
     # Trigger workflow
-    subprocess.run(["gh", "workflow", "run", workflow, "--ref", branch], check=True)
+    run_command(["gh", "workflow", "run", workflow, "--ref", branch])
 
     print("GitHub workflow triggered successfully.")
 
 
-def main():
+def main() -> None:
     """Main function."""
     args = parse_args()
 
@@ -354,8 +405,7 @@ def main():
 
     # If we're on CI, rename the zip file to a standard name for the artifact
     if args.ci:
-        system, arch = get_platform_info()
-        standard_name = f"anymatix-portable-comfyui.zip"
+        standard_name = "anymatix-portable-comfyui.zip"
         shutil.copy(zip_filename, standard_name)
         print(f"Created standardized zip file for CI: {standard_name}")
 
