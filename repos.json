@@ -1,0 +1,5 @@
+[
+  { "url": "https://github.com/Anymatix/anymatix-comfy-nodes.git" },
+  { "url": "https://github.com/alessandrozonta/ComfyUI-CLIPSeg.git" },
+  { "url": "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git" }
+]
