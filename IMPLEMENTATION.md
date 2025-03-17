@@ -49,13 +49,13 @@ Custom node repositories are cloned from the URLs specified in `repos.json`. The
 
 Platform-specific launch scripts are created:
 
-1. **macOS**: `anymatix_comfyui_darwin`
+1. **macOS/Linux**: `anymatix_comfyui`
    - Changes to the ComfyUI directory
-   - Checks for and removes the quarantine attribute if present
+   - Checks for and removes the quarantine attribute if present (macOS only)
    - Launches ComfyUI with the portable Python
    - Passes the appropriate command-line arguments
 
-2. **Windows**: `anymatix_comfyui_windows.bat`
+2. **Windows**: `anymatix_comfyui.bat`
    - Windows batch file that performs the same functions as the Unix scripts
 
 All launch scripts accept an optional port number as the first argument, defaulting to 8188 if not provided.
@@ -142,8 +142,8 @@ To use the package:
 1. Download the appropriate zip file for your platform
 2. Extract it to a directory of your choice
 3. Run the appropriate launch script for your platform:
-   - macOS: `anymatix_comfyui_darwin`
-   - Windows: `anymatix_comfyui_windows.bat`
+   - macOS/Linux: `anymatix_comfyui`
+   - Windows: `anymatix_comfyui.bat`
 
 The script will launch ComfyUI with the portable Python and the appropriate command-line arguments.
 

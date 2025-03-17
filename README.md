@@ -15,9 +15,9 @@ This project creates a portable ComfyUI package that includes:
 
 1. Download the latest release from the [Releases](https://github.com/vincenzoml/anymatix-portable-comfyui/releases) page
 2. Extract the zip file to a directory of your choice
-3. Run the appropriate launch script for your platform:
-   - macOS: `anymatix_comfyui_darwin`
-   - Windows: `anymatix_comfyui_windows.bat`
+3. Run the launch script for your platform:
+   - macOS/Linux: `anymatix_comfyui`
+   - Windows: `anymatix_comfyui.bat`
 
 ### macOS Notes
 

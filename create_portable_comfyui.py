@@ -263,7 +263,7 @@ def create_launch_script() -> None:
 
     # Create the launch script for macOS
     if system == "darwin":
-        launch_script_path = os.path.join(ANYMATIX_DIR, f"anymatix_comfyui_{system}")
+        launch_script_path = os.path.join(ANYMATIX_DIR, "anymatix_comfyui")
 
         with open(launch_script_path, "w") as f:
             f.write(
@@ -309,7 +309,7 @@ cd "$SCRIPT_DIR/ComfyUI"
 
     # Create the launch script for Linux
     elif system == "linux":
-        launch_script_path = os.path.join(ANYMATIX_DIR, f"anymatix_comfyui_{system}")
+        launch_script_path = os.path.join(ANYMATIX_DIR, "anymatix_comfyui")
 
         with open(launch_script_path, "w") as f:
             f.write(
@@ -340,7 +340,7 @@ cd "$SCRIPT_DIR/ComfyUI"
 
     # Create the launch script for Windows
     elif system == "windows":
-        launch_script_path = os.path.join(ANYMATIX_DIR, "anymatix_comfyui_windows.bat")
+        launch_script_path = os.path.join(ANYMATIX_DIR, "anymatix_comfyui.bat")
 
         with open(launch_script_path, "w") as f:
             f.write(
