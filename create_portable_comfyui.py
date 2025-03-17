@@ -223,6 +223,38 @@ def create_portable_python() -> None:
             # For other platforms, install all requirements normally
             run_command([pip_exe, "install", "-r", "requirements.txt"])
 
+    # Set executable permissions on files in python/bin directory for Unix-like systems
+    if platform.system() != "Windows":
+        bin_dir = os.path.join(PYTHON_DIR, "bin")
+        print(f"Setting executable permissions on files in {bin_dir}...")
+
+        # Check if bin directory exists
+        if os.path.exists(bin_dir):
+            # Get all files in the bin directory
+            bin_files = [
+                os.path.join(bin_dir, f)
+                for f in os.listdir(bin_dir)
+                if os.path.isfile(os.path.join(bin_dir, f))
+            ]
+
+            # Set executable permissions for each file
+            for file_path in bin_files:
+                try:
+                    current_mode = os.stat(file_path).st_mode
+                    # Add executable bit for user, group, and others if not already set
+                    new_mode = (
+                        current_mode | 0o111
+                    )  # Add executable bit for user, group, and others
+                    os.chmod(file_path, new_mode)
+                except Exception as e:
+                    print(
+                        f"Warning: Could not set executable permission on {file_path}: {e}"
+                    )
+
+            print(f"Executable permissions set on {len(bin_files)} files in {bin_dir}")
+        else:
+            print(f"Warning: Bin directory {bin_dir} does not exist")
+
     print("Portable Python environment created successfully.")
 
 
@@ -291,16 +323,6 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     fi
 fi
 
-# Set executable permission bits on files in python/bin directory
-echo "Setting executable permissions on Python binaries..."
-chmod -R +x "$SCRIPT_DIR/python/bin"
-if [ $? -eq 0 ]; then
-    echo "Executable permissions set successfully."
-else
-    echo "Warning: Could not set executable permissions. You may need to run this manually:"
-    echo "chmod -R +x \\"$SCRIPT_DIR/python/bin\\""
-fi
-
 # Change to the ComfyUI directory
 cd "$SCRIPT_DIR/ComfyUI"
 
@@ -331,16 +353,6 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Default port
 PORT=${1:-8188}
-
-# Set executable permission bits on files in python/bin directory
-echo "Setting executable permissions on Python binaries..."
-chmod -R +x "$SCRIPT_DIR/python/bin"
-if [ $? -eq 0 ]; then
-    echo "Executable permissions set successfully."
-else
-    echo "Warning: Could not set executable permissions. You may need to run this manually:"
-    echo "chmod -R +x \\"$SCRIPT_DIR/python/bin\\""
-fi
 
 # Change to the ComfyUI directory
 cd "$SCRIPT_DIR/ComfyUI"
@@ -376,14 +388,6 @@ if "%1"=="" (
 ) else (
     set PORT=%1
 )
-
-REM Set executable permissions on Python binaries (not needed on Windows as .exe files are already executable)
-echo Setting executable permissions on Python binaries...
-REM Windows doesn't need chmod, but we'll ensure scripts are executable by setting attributes
-attrib -R "%SCRIPT_DIR%python\\Scripts\\*.exe" >nul 2>&1
-attrib -R "%SCRIPT_DIR%python\\*.exe" >nul 2>&1
-attrib -R "%SCRIPT_DIR%python\\bin\\*.exe" >nul 2>&1
-echo Executable permissions set successfully.
 
 REM Change to the ComfyUI directory
 cd "%SCRIPT_DIR%ComfyUI"
