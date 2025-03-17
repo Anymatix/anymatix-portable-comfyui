@@ -154,25 +154,31 @@ def create_portable_python() -> None:
     if platform.system() == "Windows":
         # On Windows, use a different approach to run conda
         conda_exe = os.path.join(PYTHON_DIR, "Scripts", "conda.exe")
+        pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
 
         # Initialize conda for batch usage
         print("Initializing conda...")
-        run_command([conda_exe, "init", "cmd.exe"], check=False)
+        try:
+            run_command([conda_exe, "init", "cmd.exe"], check=False)
+        except Exception as e:
+            print(f"Warning: Could not initialize conda: {e}")
+            print("Continuing with installation...")
 
-        # Create a batch file to run conda commands
-        batch_file = "run_conda_install.bat"
-        with open(batch_file, "w") as f:
-            f.write(f"@echo off\n")
-            f.write(f"call {os.path.join(PYTHON_DIR, 'Scripts', 'activate.bat')}\n")
-            f.write(f"conda install -y python=3.10\n")
-            f.write(f"pip install -r requirements.txt\n")
+        # Install Python 3.10 using conda
+        print("Installing Python 3.10...")
+        try:
+            run_command([conda_exe, "install", "-y", "python=3.10"], check=False)
+        except Exception as e:
+            print(f"Warning: Could not install Python 3.10 with conda: {e}")
+            print("Continuing with installation...")
 
-        # Run the batch file
-        print("Running conda installation...")
-        run_command(["cmd.exe", "/c", batch_file], shell=True)
-
-        # Clean up
-        os.remove(batch_file)
+        # Install requirements using pip directly
+        print("Installing requirements with pip...")
+        try:
+            run_command([pip_exe, "install", "-r", "requirements.txt"], check=False)
+        except Exception as e:
+            print(f"Warning: Could not install requirements with pip: {e}")
+            print("Continuing with installation...")
     else:
         # For Unix-like systems, use the original approach
         conda_exe = os.path.join(PYTHON_DIR, "bin", "conda")
