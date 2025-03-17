@@ -422,7 +422,29 @@ def create_zip_package() -> str:
     # Create zip filename with version and architecture
     zip_filename = f"anymatix-portable-comfyui-{system}-{arch}-v{version}.zip"
 
-    with zipfile.ZipFile(zip_filename, "w", zipfile.ZIP_DEFLATED) as zipf:
+    # Use higher compression level for Linux to reduce file size
+    compression_method = zipfile.ZIP_DEFLATED
+
+    if system == "linux":
+        print("Using maximum compression for Linux build to reduce file size")
+        # For Linux, we'll use external zip command with maximum compression
+        try:
+            # Create the zip file with maximum compression
+            run_command(["zip", "-9", "-r", zip_filename, ANYMATIX_DIR])
+            print(
+                f"Zip package created successfully using external zip command: {zip_filename}"
+            )
+            return zip_filename
+        except Exception as e:
+            print(f"Warning: Error using external zip command: {e}")
+            print("Falling back to Python's zipfile module")
+
+    # For other platforms or if external zip fails, use Python's zipfile
+    print(
+        f"Using Python's zipfile module with compression method: {compression_method}"
+    )
+
+    with zipfile.ZipFile(zip_filename, "w", compression_method) as zipf:
         for root, _, files in os.walk(ANYMATIX_DIR):
             for file in files:
                 file_path = os.path.join(root, file)
