@@ -304,8 +304,8 @@ fi
 # Change to the ComfyUI directory
 cd "$SCRIPT_DIR/ComfyUI"
 
-# Launch ComfyUI with the portable Python
-"$SCRIPT_DIR/python/bin/python" main.py \\
+# Launch ComfyUI with the portable Python using exec to preserve PID
+exec "$SCRIPT_DIR/python/bin/python" main.py \\
     --enable-cors-header \\
     "*" \\
     --force-fp16 \\
@@ -345,8 +345,8 @@ fi
 # Change to the ComfyUI directory
 cd "$SCRIPT_DIR/ComfyUI"
 
-# Launch ComfyUI with the portable Python
-"$SCRIPT_DIR/python/bin/python" main.py \\
+# Launch ComfyUI with the portable Python using exec to preserve PID
+exec "$SCRIPT_DIR/python/bin/python" main.py \\
     --enable-cors-header \\
     "*" \\
     --force-fp16 \\
