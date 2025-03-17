@@ -47,3 +47,5 @@ The port can be the optional first argument of the launch script and default to 
 18) The version number should be taken from a file named VERSION.txt, initially containing a suitable version number for an initial release, using semantic versioning.  
 
 19) The workflow should create a GitHub release with the version number from VERSION.txt and upload the platform-specific zip files as separate assets of this single release.  
+
+20) The launch script should be named anymatix_comfyui (same on all platforms)
