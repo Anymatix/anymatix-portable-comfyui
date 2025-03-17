@@ -49,3 +49,9 @@ The port can be the optional first argument of the launch script and default to 
 19) The workflow should create a GitHub release with the version number from VERSION.txt and upload the platform-specific zip files as separate assets of this single release.  
 
 20) The launch script should be named anymatix_comfyui (same on all platforms)
+
+21) The launch script on the platform where this is needed, should de-quarantine all the files
+
+22) The launch script should set executable permission bit on the files in the python/bin directory
+
+23) ComfyUI must be launched with exec to preserve the PID of the script, so parent programs can kill it.

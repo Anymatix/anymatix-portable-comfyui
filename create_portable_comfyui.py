@@ -291,6 +291,16 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     fi
 fi
 
+# Set executable permission bits on files in python/bin directory
+echo "Setting executable permissions on Python binaries..."
+chmod -R +x "$SCRIPT_DIR/python/bin"
+if [ $? -eq 0 ]; then
+    echo "Executable permissions set successfully."
+else
+    echo "Warning: Could not set executable permissions. You may need to run this manually:"
+    echo "chmod -R +x \\"$SCRIPT_DIR/python/bin\\""
+fi
+
 # Change to the ComfyUI directory
 cd "$SCRIPT_DIR/ComfyUI"
 
@@ -321,6 +331,16 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Default port
 PORT=${1:-8188}
+
+# Set executable permission bits on files in python/bin directory
+echo "Setting executable permissions on Python binaries..."
+chmod -R +x "$SCRIPT_DIR/python/bin"
+if [ $? -eq 0 ]; then
+    echo "Executable permissions set successfully."
+else
+    echo "Warning: Could not set executable permissions. You may need to run this manually:"
+    echo "chmod -R +x \\"$SCRIPT_DIR/python/bin\\""
+fi
 
 # Change to the ComfyUI directory
 cd "$SCRIPT_DIR/ComfyUI"
@@ -356,6 +376,14 @@ if "%1"=="" (
 ) else (
     set PORT=%1
 )
+
+REM Set executable permissions on Python binaries (not needed on Windows as .exe files are already executable)
+echo Setting executable permissions on Python binaries...
+REM Windows doesn't need chmod, but we'll ensure scripts are executable by setting attributes
+attrib -R "%SCRIPT_DIR%python\\Scripts\\*.exe" >nul 2>&1
+attrib -R "%SCRIPT_DIR%python\\*.exe" >nul 2>&1
+attrib -R "%SCRIPT_DIR%python\\bin\\*.exe" >nul 2>&1
+echo Executable permissions set successfully.
 
 REM Change to the ComfyUI directory
 cd "%SCRIPT_DIR%ComfyUI"
