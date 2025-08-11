@@ -1,6 +1,20 @@
 [
     {
         "anymatix_version": "1.0.0-beta.1",
-        "comfyui_commit": "b6e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2"
+        "comfyui_commit": "f4231a80b1b904b45ade0def9b37320c4adfe71b",
+        "custom_nodes": [
+            {
+                "url": "https://github.com/Anymatix/anymatix-comfy-nodes.git",
+                "commit": "dc02bb6e7407bbd7bd63aedcc3a04edf7bc86fc3"
+            },
+            {
+                "url": "https://github.com/alessandrozonta/ComfyUI-CLIPSeg.git",
+                "commit": "22db87ab6b170aa3d40c070b937a83183d9dc632"
+            },
+            {
+                "url": "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git",
+                "commit": "8e4d79471bf1952154768e8435a9300077b534fa"
+            }
+        ]
     }
 ]

@@ -107,7 +107,8 @@ jobs:
       - name: Get version
         id: get-version
         run: |
-          echo "VERSION=$(cat VERSION.txt | tr -d ' %')" >> $GITHUB_OUTPUT
+          VERSION=$(jq -r 'map(.anymatix_version) | max' PIN.json)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           
       - name: Download all artifacts
         uses: actions/download-artifact@v4

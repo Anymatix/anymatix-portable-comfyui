@@ -47,10 +47,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+
 def get_version() -> str:
-    """Get the version from VERSION.txt."""
-    with open("VERSION.txt", "r") as f:
-        return f.read().strip()
+    """Get the latest anymatix_version from PIN.json (lexicographically highest)."""
+    if not os.path.exists("PIN.json"):
+        raise RuntimeError("PIN.json not found; cannot determine version.")
+    with open("PIN.json", "r") as f:
+        pins = json.load(f)
+    # Find the lexicographically highest version
+    versions = [pin.get("anymatix_version", "") for pin in pins if pin.get("anymatix_version")]
+    if not versions:
+        raise RuntimeError("No anymatix_version found in PIN.json.")
+    return sorted(versions)[-1]
 
 
 def get_platform_info() -> tuple[str, str]:
@@ -296,7 +304,19 @@ def clone_custom_nodes() -> None:
     with open("repos.json", "r") as f:
         repos = json.load(f)
 
-    # Clone each repository
+    # Read PIN.json for current version pins
+    anymatix_version = get_version()
+    pin_commit_map = {}
+    if os.path.exists("PIN.json"):
+        with open("PIN.json", "r") as pf:
+            pins = json.load(pf)
+        for pin in pins:
+            if pin.get("anymatix_version", "").strip() == anymatix_version:
+                for node in pin.get("custom_nodes", []):
+                    pin_commit_map[node["url"]] = node["commit"]
+                break
+
+    # Clone each repository and check out the pinned commit if available
     for repo in repos:
         repo_url = repo["url"]
         repo_name = os.path.basename(repo_url).replace(".git", "")
@@ -305,7 +325,15 @@ def clone_custom_nodes() -> None:
         print(f"Cloning {repo_url}...")
         run_command(["git", "clone", repo_url, repo_dir])
 
-    print("Custom node repositories cloned successfully.")
+        # Checkout the pinned commit if available
+        pin_commit = pin_commit_map.get(repo_url)
+        if pin_commit:
+            print(f"Checking out pinned commit {pin_commit} for {repo_url}")
+            run_command(["git", "-C", repo_dir, "checkout", pin_commit])
+        else:
+            print(f"No pin found for {repo_url}, using default branch HEAD.")
+
+    print("Custom node repositories cloned and pinned successfully.")
 
 
 def create_launch_script() -> None:

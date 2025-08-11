@@ -21,14 +21,33 @@ def get_anymatix_version():
     with open(APP_VERSION_PATH, 'r') as f:
         return f.read().strip()
 
+
 def get_comfyui_commit():
-    try:
-        return subprocess.check_output(
-            ['git', '-C', COMFYUI_PATH, 'rev-parse', 'HEAD'],
-            text=True
-        ).strip()
-    except subprocess.CalledProcessError:
-        raise RuntimeError(f"Could not get commit hash from {COMFYUI_PATH}")
+    if os.path.isdir(COMFYUI_PATH):
+        try:
+            return subprocess.check_output(
+                ['git', '-C', COMFYUI_PATH, 'rev-parse', 'HEAD'],
+                text=True
+            ).strip()
+        except subprocess.CalledProcessError:
+            pass
+    # Fallback: fetch latest commit from remote main branch
+    # Try refs/heads/main first
+    for ref in ['refs/heads/main', 'HEAD']:
+        try:
+            output = subprocess.check_output(
+                ['git', 'ls-remote', 'https://github.com/comfyanonymous/ComfyUI.git', ref],
+                text=True
+            ).strip()
+            if output:
+                print(f"git ls-remote output for ComfyUI {ref}: {output}")
+                return output.split()[0]
+            else:
+                print(f"No output from git ls-remote for ComfyUI {ref}.")
+        except subprocess.CalledProcessError as e:
+            print(f"git ls-remote failed for ComfyUI {ref}: {e}")
+    raise RuntimeError("Could not get commit hash from local or remote ComfyUI repo (tried refs/heads/main and HEAD)")
+
 
 def get_custom_nodes_commits():
     with open(REPOS_JSON_PATH, 'r') as f:
@@ -38,13 +57,30 @@ def get_custom_nodes_commits():
         url = repo['url']
         name = os.path.splitext(os.path.basename(url))[0]
         node_path = os.path.join(CUSTOM_NODES_PATH, name)
-        try:
-            commit = subprocess.check_output(
-                ['git', '-C', node_path, 'rev-parse', 'HEAD'],
-                text=True
-            ).strip()
-        except subprocess.CalledProcessError:
-            commit = None
+        commit = None
+        if os.path.isdir(node_path):
+            try:
+                commit = subprocess.check_output(
+                    ['git', '-C', node_path, 'rev-parse', 'HEAD'],
+                    text=True
+                ).strip()
+            except subprocess.CalledProcessError:
+                pass
+        if not commit:
+            # Fallback: fetch latest commit from remote main branch
+            try:
+                output = subprocess.check_output(
+                    ['git', 'ls-remote', url, 'HEAD'],
+                    text=True
+                ).strip()
+                if output:
+                    commit = output.split()[0]
+                else:
+                    print(f"No output from git ls-remote for {url}")
+                    commit = None
+            except subprocess.CalledProcessError:
+                print(f"Could not get commit hash from local or remote for {url}")
+                commit = None
         pins.append({'url': url, 'commit': commit})
     return pins
 
