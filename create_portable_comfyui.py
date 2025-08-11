@@ -276,8 +276,7 @@ def clone_comfyui() -> None:
     """Clone the ComfyUI repository."""
     print("Cloning ComfyUI repository...")
     # Get current Anymatix version
-    with open("VERSION.txt", "r") as vf:
-        anymatix_version = vf.read().strip()
+    anymatix_version = get_version()
     # Load PIN.json and find the matching comfyui_commit
     with open("PIN.json", "r") as pf:
         pins = json.load(pf)
