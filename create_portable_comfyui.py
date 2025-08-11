@@ -267,8 +267,22 @@ def create_portable_python() -> None:
 def clone_comfyui() -> None:
     """Clone the ComfyUI repository."""
     print("Cloning ComfyUI repository...")
+    # Get current Anymatix version
+    with open("VERSION.txt", "r") as vf:
+        anymatix_version = vf.read().strip()
+    # Load PIN.json and find the matching comfyui_commit
+    with open("PIN.json", "r") as pf:
+        pins = json.load(pf)
+    comfyui_commit = None
+    for pin in pins:
+        if pin.get("anymatix_version", "").strip() == anymatix_version:
+            comfyui_commit = pin.get("comfyui_commit")
+            break
+    if not comfyui_commit:
+        raise RuntimeError(f"No comfyui_commit found in PIN.json for Anymatix version {anymatix_version}")
     run_command(["git", "clone", COMFYUI_REPO, COMFYUI_DIR])
-    print("ComfyUI repository cloned successfully.")
+    run_command(["git", "-C", COMFYUI_DIR, "checkout", comfyui_commit])
+    print(f"ComfyUI repository cloned and checked out to {comfyui_commit}.")
 
 
 def clone_custom_nodes() -> None:

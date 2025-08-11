@@ -1,59 +1,116 @@
-# Anymatix Portable ComfyUI
+# Portable ComfyUI Bundle
 
-A portable, self-contained distribution of ComfyUI for macOS and Windows.
+Self‑contained ComfyUI distribution for macOS and Windows (Linux support is easy to re‑enable). Produces a zip that runs without touching an existing Python install.
 
-## Overview
+## What You Get
+1. Miniforge based portable Python (Python 3.10) with required packages
+2. A fresh clone of upstream ComfyUI
+3. Custom node repositories (from `repos.json`)
+4. Platform launch scripts (`anymatix_comfyui` / `anymatix_comfyui.bat`)
+5. Versioned archive: `anymatix-portable-comfyui-{system}-{arch}-v<VERSION>.zip`
 
-This project creates a portable ComfyUI package that includes:
+## Quick Use (End Users)
+1. Download a release zip from the [Releases](https://github.com/vincenzoml/anymatix-portable-comfyui/releases) page
+2. Extract anywhere you have write permissions
+3. Run:
+   - macOS / Linux: `./anymatix/anymatix_comfyui [port]`
+   - Windows: `anymatix\anymatix_comfyui.bat [port]`
+   (Port optional, defaults to 8188)
 
-1. A fully self-contained Python installation with all required dependencies
-2. The ComfyUI repository
-3. Custom node repositories
-4. Platform-specific launch scripts
-
-## Usage
-
-1. Download the latest release from the [Releases](https://github.com/vincenzoml/anymatix-portable-comfyui/releases) page
-2. Extract the zip file to a directory of your choice
-3. Run the launch script for your platform:
-   - macOS/Linux: `anymatix_comfyui`
-   - Windows: `anymatix_comfyui.bat`
-
-### macOS Notes
-
-On macOS, the launch script will automatically attempt to remove the quarantine attribute that macOS applies to downloaded files. If the automatic removal fails, you can manually remove the quarantine attribute by running:
-
+### macOS Quarantine Note
+The script attempts to remove the quarantine attribute automatically. If you still get a security warning:
 ```bash
-xattr -r -d com.apple.quarantine /path/to/extracted/anymatix
+xattr -r -d com.apple.quarantine /path/to/unzipped/anymatix
 ```
 
-## Building from Source
+## Building Locally (Developers)
+Prereqs: Python 3.10+, Git, unzip utilities.
 
-To build the package from source:
+```bash
+python -m pip install --upgrade pip
+python create_portable_comfyui.py --local
+```
+Resulting zip appears in the repo root.
 
-1. Clone this repository
-2. Run `python create_portable_comfyui.py --local`
+Flags:
+- `--local` (no CI assumptions)
+- `--ci` (used in GitHub Actions; keeps produced filename as generated)
+- `--push` (commit & push artifacts/changes) – use cautiously
+- `--trigger-workflow` with `--workflow build.yml` (uses GitHub CLI `gh` if configured)
 
-## Requirements
+## Updating to Latest ComfyUI
+By default the script clones the HEAD of upstream main. To explicitly pin / update:
+1. Build once, then record the commit:
+   ```bash
+   (cd anymatix/ComfyUI && git rev-parse HEAD)
+   ```
+2. To pin a specific commit, edit `create_portable_comfyui.py` inside `clone_comfyui()` after the clone step:
+   ```python
+   run_command(["git", "clone", COMFYUI_REPO, COMFYUI_DIR])
+   run_command(["git", "-C", COMFYUI_DIR, "checkout", "<commit-sha>"])
+   ```
+3. Rebuild and test launch.
+4. Commit with message e.g. `chore: update ComfyUI to <short-sha>`.
 
-The package includes all required dependencies, but to build it, you need:
+Validation checklist after updating:
+- Launch works (UI reachable)
+- Basic workflow executes
+- Custom nodes load without ImportError
+- Python version still 3.10 (expected)
 
-- Python 3.10 or later
-- Git
+## Custom Nodes
+Repositories listed in `repos.json` are cloned into `anymatix/ComfyUI/custom_nodes/`.
 
-## Version Information
+To add one:
+1. Append an object with a `url` field to `repos.json`
+2. Re-run build
+3. Verify nodes appear in the UI
 
-The current version is 1.0.0, which is the first stable release. The version number follows semantic versioning:
+For reproducibility, prefer referencing stable commits in those repos (fork & pin if upstream is volatile).
 
-- Major version: Significant changes that may break compatibility
-- Minor version: New features that don't break compatibility
-- Patch version: Bug fixes and minor improvements
+## Reproducibility & Pinning
+Current default = floating HEAD of upstream repos. For strict reproducibility:
+- Pin ComfyUI commit (see above)
+- Pin each custom node repo commit (add a checkout command after clone in a small helper or extend script)
+- Optionally vendor a `requirements.txt` lock snapshot
+
+Document the commits used in release notes if you float.
+
+## Versioning
+`VERSION.txt` holds the semantic version used in archive names and GitHub releases (ex: `1.0.0`).
+
+If this project is used within a host application (e.g. as a submodule) you can synchronize by writing that host version into this `VERSION.txt` before triggering CI.
+
+Semantic guidelines:
+- MAJOR: packaging/build changes that alter structure or invocation
+- MINOR: new included nodes / features
+- PATCH: fixes, dependency pin adjustments, minor script improvements
+
+## CI Overview
+GitHub Actions workflow (`.github/workflows/build.yml`) builds macOS & Windows zips then creates a release tagged `v<VERSION>` (version read from `VERSION.txt`). Linux job is present but commented out.
+
+## File / Naming Reference
+Archive pattern: `anymatix-portable-comfyui-{system}-{arch}-v<VERSION>.zip`
+Examples:
+- `anymatix-portable-comfyui-darwin-arm64-v1.0.0.zip`
+- `anymatix-portable-comfyui-windows-x64-v1.0.0.zip`
+
+Launch scripts created under `anymatix/` directory inside the archive.
+
+## Troubleshooting
+| Symptom | Likely Cause | Resolution |
+|---------|--------------|------------|
+| Missing nodes | Repo absent in `repos.json` | Add entry & rebuild |
+| ImportError at launch | Dependency not installed / pin drift | Rebuild; ensure requirements satisfied |
+| Wrong version in release | `VERSION.txt` not updated | Edit file, commit, rerun CI |
+| macOS security block | Quarantine attribute | Remove with `xattr` as shown |
 
 ## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT – see [LICENSE](LICENSE). Check upstream component licenses (ComfyUI & custom nodes) for their terms.
 
 ## Acknowledgments
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
+- [Miniforge](https://github.com/conda-forge/miniforge)
 
-- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) - The core ComfyUI application
-- [Miniforge](https://github.com/conda-forge/miniforge) - The conda distribution used for the portable Python environment 
+---
+Contributions welcome. Keep changes small and build script readable.

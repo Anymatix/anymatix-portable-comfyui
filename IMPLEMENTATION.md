@@ -1,17 +1,16 @@
-# Anymatix Portable ComfyUI Implementation
+# Implementation Details
 
-This document describes the implementation of the Anymatix Portable ComfyUI package.
+Technical reference for maintainers of the portable ComfyUI bundle.
 
-## Overview
+## Components
 
-The Anymatix Portable ComfyUI package is a self-contained, portable distribution of ComfyUI that includes:
+1. Miniforge-based portable Python (installed under `anymatix/python`)
+2. Upstream ComfyUI checkout (`anymatix/ComfyUI`)
+3. Custom node repositories (`anymatix/ComfyUI/custom_nodes/*` from `repos.json`)
+4. Platform launch scripts (`anymatix_comfyui` or `anymatix_comfyui.bat`)
+5. Packaging logic producing a versioned zip
 
-1. A portable Python environment with all required dependencies
-2. The ComfyUI repository
-3. Custom node repositories
-4. Platform-specific launch scripts (Windows, macOS)
-
-The package is designed to be platform-independent and can be run on macOS and Windows.
+Currently macOS & Windows builds are active in CI; Linux logic is present but workflow job is commented out.
 
 ## Implementation Details
 
@@ -39,26 +38,27 @@ These optimizations result in better performance for tensor operations and neura
 
 ### ComfyUI Repository
 
-The ComfyUI repository is cloned from https://github.com/comfyanonymous/ComfyUI.git. This repository contains the core ComfyUI application.
+Cloned from `https://github.com/comfyanonymous/ComfyUI.git` without pinning by default (HEAD of default branch). For deterministic builds insert a checkout line after clone:
+
+```python
+run_command(["git", "clone", COMFYUI_REPO, COMFYUI_DIR])
+run_command(["git", "-C", COMFYUI_DIR, "checkout", "<commit-sha>"])
+```
+
+Record the chosen commit in release notes if you keep floating HEAD.
 
 ### Custom Node Repositories
 
-Custom node repositories are cloned from the URLs specified in `repos.json`. These repositories contain additional nodes that extend the functionality of ComfyUI.
+List defined in `repos.json` (array of objects with at least `url`). All repos are cloned directly into `custom_nodes/`. Optional future enhancement: extend each entry with an optional `commit` key and perform a checkout to pin versions (ensures reproducibility). For now they float at remote HEAD.
 
 ### Launch Scripts
 
-Platform-specific launch scripts are created:
+Created inside the `anymatix/` directory. Both variants accept an optional first argument = port (default 8188). Flags presently used:
+- `--enable-cors-header "*"`
+- `--force-fp16`
+- `--preview-method=none`
 
-1. **macOS/Linux**: `anymatix_comfyui`
-   - Changes to the ComfyUI directory
-   - Checks for and removes the quarantine attribute if present (macOS only)
-   - Launches ComfyUI with the portable Python
-   - Passes the appropriate command-line arguments
-
-2. **Windows**: `anymatix_comfyui.bat`
-   - Windows batch file that performs the same functions as the Unix scripts
-
-All launch scripts accept an optional port number as the first argument, defaulting to 8188 if not provided.
+Adjust flags cautiously; changes impact performance / compatibility.
 
 #### macOS Quarantine Handling
 
@@ -72,19 +72,24 @@ This approach ensures that the quarantine attribute is only removed when necessa
 
 ### Version Management
 
-The package version is managed using a `VERSION.txt` file in the root of the repository. This file contains a semantic version number (currently `1.0.0`) that is used in the zip filename and for GitHub releases.
+`VERSION.txt` supplies the version token embedded in zip filenames and used by the release workflow. No environment override currently inside `create_portable_comfyui.py`; workflow reads the file directly.
 
-## Building the Package
+External host projects may synchronize their version by updating this file before invoking the workflow. Keep SemVer (pre-release tags allowed). Zip naming formula:
 
-The package is built using the `create_portable_comfyui.py` script. This script:
+```
+anymatix-portable-comfyui-{system}-{arch}-v{version}.zip
+```
 
-1. Creates the portable Python environment
-2. Clones the ComfyUI repository
-3. Clones the custom node repositories
-4. Creates platform-specific launch scripts
-5. Packages everything into a zip file with version and architecture information
+## Build Script Flow (`create_portable_comfyui.py`)
 
-The script can be run locally or on GitHub CI.
+1. Ensure `anymatix/` base directory exists
+2. Download & install Miniforge to `anymatix/python`
+3. Install Python 3.10 + requirements (with Apple Silicon optimizations: Accelerate BLAS pin + torch MPS)
+4. Clone ComfyUI
+5. Clone custom nodes
+6. Generate launch script(s)
+7. Package directory tree into a versioned zip
+8. (Optional) push / trigger workflow if flags supplied
 
 ### Local Build
 
@@ -96,13 +101,12 @@ python create_portable_comfyui.py --local
 
 ### CI Build
 
-The package is also built on GitHub CI using the workflow defined in `.github/workflows/build.yml`. This workflow:
-
-1. Runs on multiple platforms (macOS, Windows)
-2. Sets up Python
-3. Runs the `create_portable_comfyui.py` script with the `--ci` flag
-4. Uploads the resulting zip file as an artifact
-5. Creates a GitHub release with the platform-specific zip files
+Workflow (`.github/workflows/build.yml`):
+1. Parallel jobs build macOS & Windows artifacts
+2. Each job runs `python create_portable_comfyui.py --ci`
+3. Artifacts uploaded using generated filenames
+4. Release job reads `VERSION.txt`, downloads artifacts, publishes release & tag `v<VERSION>`
+5. Linux job is disabled (can be re-enabled by uncommenting block)
 
 ## GitHub Automation
 
@@ -147,21 +151,20 @@ To use the package:
 
 The script will launch ComfyUI with the portable Python and the appropriate command-line arguments.
 
-## Zip File Naming Convention
+## Reproducibility Enhancements (Roadmap)
 
-The zip files are named according to the following convention:
+Short term:
+- Add optional commit pinning for ComfyUI & each custom node
+- Provide a manifest file listing all repo URLs + resolved SHAs + Python packages
 
-```
-anymatix-portable-comfyui-{platform}-{architecture}-v{version}.zip
-```
-
-For example:
-- `anymatix-portable-comfyui-darwin-arm64-v1.0.0.zip` for macOS on Apple Silicon
-- `anymatix-portable-comfyui-windows-x64-v1.0.0.zip` for Windows on x64
+Medium term:
+- Hash the `anymatix/` directory content and store a build metadata JSON alongside the zip
+- Allow environment variable override for version (kept out for now to avoid accidental mismatches)
 
 ## Future Improvements
 
-- Add more custom node repositories
-- Improve error handling in the build script
-- Add a GUI launcher
-- Add automated testing of the built packages 
+- Commit pinning support in `repos.json` (schema: `{ "url": "...", "commit": "..." }`)
+- Automated test workflow that launches the built bundle headless and runs a sample graph
+- Optional Linux build re-enable
+- Integrity manifest & signature
+- GUI launcher / platform integration wrappers
