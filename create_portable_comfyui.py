@@ -335,8 +335,16 @@ def prune_environment() -> None:
     except Exception as e:
         print(f"Warning: removing pkgs dir failed: {e}")
 
-    # 4) Remove __pycache__, *.pyc, *.pyo across the anymatix tree
+    # Prepare exclusions (do not prune anything inside comfyui_embedded_docs)
+    comfy_docs_pkg_dir = os.path.join(site_packages, "comfyui_embedded_docs")
+    exclude_prefixes = [os.path.abspath(comfy_docs_pkg_dir)]
+
+    # 4) Remove __pycache__, *.pyc, *.pyo across the anymatix tree (except excluded dirs)
     for root, dirs, files in os.walk(ANYMATIX_DIR):
+        # Skip excluded subtrees entirely
+        abs_root = os.path.abspath(root)
+        if any(abs_root.startswith(p) for p in exclude_prefixes):
+            continue
         # Remove __pycache__ directories
         if "__pycache__" in dirs:
             try:
@@ -405,6 +413,14 @@ def prune_environment() -> None:
     }
     if os.path.isdir(site_packages):
         for root, dirs, _ in os.walk(site_packages):
+            # Skip comfyui_embedded_docs entirely
+            try:
+                abs_root = os.path.abspath(root)
+            except Exception:
+                abs_root = root
+            if any(abs_root.startswith(p) for p in exclude_prefixes):
+                continue
+
             # Determine if we're inside numpy; don't remove its tests (SciPy imports numpy._core.tests at runtime)
             try:
                 rel = os.path.relpath(root, site_packages)
