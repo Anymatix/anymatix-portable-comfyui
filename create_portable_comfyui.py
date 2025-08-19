@@ -405,8 +405,19 @@ def prune_environment() -> None:
     }
     if os.path.isdir(site_packages):
         for root, dirs, _ in os.walk(site_packages):
+            # Determine if we're inside numpy; don't remove its tests (SciPy imports numpy._core.tests at runtime)
+            try:
+                rel = os.path.relpath(root, site_packages)
+            except ValueError:
+                rel = ""
+            top_level = rel.split(os.sep)[0] if rel and rel != os.curdir else ""
+            inside_numpy = top_level == "numpy"
+
             for d in list(dirs):
                 if d in trim_dirs:
+                    # Keep numpy tests; other trim targets (docs/examples/etc.) are safe to remove
+                    if d == "tests" and inside_numpy:
+                        continue
                     try:
                         shutil.rmtree(os.path.join(root, d), ignore_errors=True)
                     except Exception:
