@@ -295,6 +295,88 @@ def create_portable_python() -> None:
     print("Portable Python environment created successfully.")
 
 
+def prune_environment() -> None:
+    """Prune caches and non-runtime files to reduce bundle size (all platforms)."""
+    print("Pruning environment to reduce size...")
+
+    system = platform.system()
+
+    # Resolve conda and pip executables
+    if system == "Windows":
+        conda_exe = os.path.join(PYTHON_DIR, "Scripts", "conda.exe")
+        pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
+        site_packages = os.path.join(PYTHON_DIR, "Lib", "site-packages")
+        conda_pkgs_dir = os.path.join(PYTHON_DIR, "pkgs")
+    else:
+        conda_exe = os.path.join(PYTHON_DIR, "bin", "conda")
+        pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
+        # Typical conda prefix layout on Unix
+        site_packages = os.path.join(PYTHON_DIR, "lib", "python3.10", "site-packages")
+        conda_pkgs_dir = os.path.join(PYTHON_DIR, "pkgs")
+
+    # 1) Clean conda caches
+    try:
+        if os.path.exists(conda_exe):
+            run_command([conda_exe, "clean", "-a", "-y"], check=False)
+    except Exception as e:
+        print(f"Warning: conda clean failed: {e}")
+
+    # 2) Purge pip cache
+    try:
+        if os.path.exists(pip_exe):
+            run_command([pip_exe, "cache", "purge"], check=False)
+    except Exception as e:
+        print(f"Warning: pip cache purge failed: {e}")
+
+    # 3) Remove conda pkgs dir if present
+    try:
+        if os.path.isdir(conda_pkgs_dir):
+            shutil.rmtree(conda_pkgs_dir, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: removing pkgs dir failed: {e}")
+
+    # 4) Remove __pycache__, *.pyc, *.pyo across the anymatix tree
+    for root, dirs, files in os.walk(ANYMATIX_DIR):
+        # Remove __pycache__ directories
+        if "__pycache__" in dirs:
+            try:
+                shutil.rmtree(os.path.join(root, "__pycache__"), ignore_errors=True)
+            except Exception:
+                pass
+        # Remove compiled python files
+        for fname in list(files):
+            if fname.endswith((".pyc", ".pyo")):
+                fpath = os.path.join(root, fname)
+                try:
+                    os.remove(fpath)
+                except Exception:
+                    pass
+
+    # 5) Trim non-runtime folders in site-packages (if exists)
+    trim_dirs = {
+        "tests",
+        "test",
+        "Testing",
+        "benchmarks",
+        "examples",
+        "example",
+        "docs",
+        "doc",
+        "tutorials",
+        "samples",
+        "sample_data",
+    }
+    if os.path.isdir(site_packages):
+        for root, dirs, _ in os.walk(site_packages):
+            for d in list(dirs):
+                if d in trim_dirs:
+                    try:
+                        shutil.rmtree(os.path.join(root, d), ignore_errors=True)
+                    except Exception:
+                        pass
+    print("Pruning complete.")
+
+
 def clone_comfyui() -> None:
     """Clone the ComfyUI repository."""
     print("Cloning ComfyUI repository...")
@@ -486,29 +568,19 @@ def create_zip_package() -> str:
     # Create zip filename with version and architecture
     zip_filename = f"anymatix-portable-comfyui-{system}-{arch}-v{version}.zip"
 
-    # Use higher compression level for Linux to reduce file size
+    # Prefer external zip with maximum compression on all platforms; fallback to Python zipfile
+    try:
+        print("Attempting external zip -9 for maximum compression...")
+        run_command(["zip", "-9", "-r", zip_filename, ANYMATIX_DIR])
+        print(f"Zip package created successfully using external zip: {zip_filename}")
+        return zip_filename
+    except Exception as e:
+        print(f"Warning: external zip failed: {e}")
+        print("Falling back to Python's zipfile with compresslevel=9")
+
     compression_method = zipfile.ZIP_DEFLATED
-
-    if system == "linux":
-        print("Using maximum compression for Linux build to reduce file size")
-        # For Linux, we'll use external zip command with maximum compression
-        try:
-            # Create the zip file with maximum compression
-            run_command(["zip", "-9", "-r", zip_filename, ANYMATIX_DIR])
-            print(
-                f"Zip package created successfully using external zip command: {zip_filename}"
-            )
-            return zip_filename
-        except Exception as e:
-            print(f"Warning: Error using external zip command: {e}")
-            print("Falling back to Python's zipfile module")
-
-    # For other platforms or if external zip fails, use Python's zipfile
-    print(
-        f"Using Python's zipfile module with compression method: {compression_method}"
-    )
-
-    with zipfile.ZipFile(zip_filename, "w", compression_method) as zipf:
+    # Python 3.10 supports compresslevel for ZIP_DEFLATED
+    with zipfile.ZipFile(zip_filename, "w", compression_method, compresslevel=9) as zipf:
         for root, _, files in os.walk(ANYMATIX_DIR):
             for file in files:
                 file_path = os.path.join(root, file)
@@ -560,6 +632,9 @@ def main() -> None:
 
     # Create portable Python environment
     create_portable_python()
+
+    # Prune environment to reduce artifact size (all platforms)
+    prune_environment()
 
     # Clone ComfyUI repository
     clone_comfyui()
