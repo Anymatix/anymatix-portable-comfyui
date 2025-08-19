@@ -17,6 +17,11 @@ Self‑contained ComfyUI distribution for macOS and Windows (Linux support is ea
    - Windows: `anymatix\anymatix_comfyui.bat [port]`
    (Port optional, defaults to 8188)
 
+### Performance Notes
+- **Apple Silicon Macs (M1/M2/M3+)**: Fully optimized with native ARM64 code, Apple Accelerate framework for fast NumPy operations, and Metal GPU acceleration
+- **Windows with NVIDIA GPU**: Includes CUDA 12.4 support for GPU acceleration  
+- **All Platforms**: Uses Python 3.10 with optimized scientific computing stack
+
 ### macOS Quarantine Note
 The script attempts to remove the quarantine attribute automatically. If you still get a security warning:
 ```bash
@@ -88,6 +93,28 @@ Semantic guidelines:
 
 ## CI Overview
 GitHub Actions workflow (`.github/workflows/build.yml`) builds macOS & Windows zips then creates a release tagged `v<VERSION>` (version read from `VERSION.txt`). Linux job is present but commented out.
+
+### Triggering Builds
+Since the workflow uses `workflow_dispatch`, you can trigger builds manually:
+
+**Option 1: GitHub Web Interface (Recommended)**
+1. Go to the repository on GitHub
+2. Click "Actions" tab
+3. Select "Build Portable ComfyUI" workflow  
+4. Click "Run workflow" → Choose branch → "Run workflow"
+
+**Option 2: GitHub CLI**
+```bash
+gh workflow run build.yml
+```
+
+**Option 3: Push Changes**
+The workflow can also be configured to run on pushes by uncommenting the push trigger in `build.yml`.
+
+### Platform Optimizations
+- **Apple Silicon (M1/M2/M3+)**: Native ARM64 builds with Apple Accelerate framework for NumPy, Metal Performance Shaders (MPS) support for PyTorch GPU acceleration
+- **Windows**: CUDA 12.4 PyTorch installation with automatic fallback to CPU-only if CUDA unavailable
+- **Cross-platform**: Miniforge-based Python 3.10 environment ensures consistent package management
 
 ## File / Naming Reference
 Archive pattern: `anymatix-portable-comfyui-{system}-{arch}-v<VERSION>.zip`
