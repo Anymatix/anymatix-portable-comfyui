@@ -634,6 +634,31 @@ def create_zip_package() -> str:
     return zip_filename
 
 
+def split_file(file_path: str, part_size_bytes: int = 512 * 1024 * 1024) -> List[str]:
+    """Split a file into fixed-size parts. Returns the list of created part filenames.
+
+    Parts are named: <file>.part01, <file>.part02, ...
+    """
+    parts: List[str] = []
+    total_size = os.path.getsize(file_path)
+    if total_size == 0:
+        return parts
+
+    idx = 1
+    with open(file_path, "rb") as src:
+        while True:
+            chunk = src.read(part_size_bytes)
+            if not chunk:
+                break
+            part_name = f"{file_path}.part{idx:02d}"
+            with open(part_name, "wb") as dst:
+                dst.write(chunk)
+            parts.append(part_name)
+            print(f"Created part {part_name} ({len(chunk)} bytes)")
+            idx += 1
+    return parts
+
+
 def push_to_github(branch: str) -> None:
     """Push changes to GitHub."""
     print(f"Pushing changes to GitHub branch {branch}...")
@@ -687,9 +712,20 @@ def main() -> None:
 
     # If we're on CI, rename the zip file to a standard name for the artifact
     if args.ci:
-        # Keep the original filename with version and platform info
-        # No need to rename to a generic name anymore
-        print(f"Using versioned zip file for CI: {zip_filename}")
+        # Split zip into 512MB parts to bypass platform limits
+        print("Splitting zip into 512MB parts for CI uploads...")
+        parts = split_file(zip_filename, 512 * 1024 * 1024)
+        if parts:
+            # Remove the original large zip to avoid double uploads
+            try:
+                os.remove(zip_filename)
+            except Exception as e:
+                print(f"Warning: failed to remove original zip {zip_filename}: {e}")
+            print("Created parts:")
+            for p in parts:
+                print(f" - {p}")
+        else:
+            print("Zip smaller than 512MB; no splitting performed.")
 
     # Push to GitHub if requested
     if args.push:

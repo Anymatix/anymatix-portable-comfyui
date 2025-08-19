@@ -27,16 +27,14 @@ jobs:
         run: |
           python create_portable_comfyui.py --ci
           
-      - name: Get zip filename
-        id: get-zip-filename
-        run: |
-          echo "ZIP_FILE=$(ls anymatix-portable-comfyui-darwin-*.zip)" >> $GITHUB_OUTPUT
-          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: anymatix-portable-comfyui-macos
-          path: ${{ steps.get-zip-filename.outputs.ZIP_FILE }}
+          path: |
+            anymatix-portable-comfyui-darwin-*.zip.part*
+            anymatix-portable-comfyui-darwin-*.zip
+          if-no-files-found: warn
 
   build-windows:
     runs-on: windows-latest
@@ -56,16 +54,14 @@ jobs:
         run: |
           python create_portable_comfyui.py --ci
           
-      - name: Get zip filename
-        id: get-zip-filename
-        run: |
-          echo "ZIP_FILE=$(Get-ChildItem -Path anymatix-portable-comfyui-windows-*.zip | Select-Object -ExpandProperty Name)" >> $env:GITHUB_OUTPUT
-          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: anymatix-portable-comfyui-windows
-          path: ${{ steps.get-zip-filename.outputs.ZIP_FILE }}
+          path: |
+            anymatix-portable-comfyui-windows-*.zip.part*
+            anymatix-portable-comfyui-windows-*.zip
+          if-no-files-found: warn
 
   # build-linux:
   #   runs-on: ubuntu-latest
