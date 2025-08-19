@@ -180,12 +180,35 @@ def create_portable_python() -> None:
             print(f"Warning: Could not install Python 3.10 with conda: {e}")
             print("Continuing with installation...")
 
-        # Install requirements using pip directly
-        print("Installing requirements with pip...")
+        # Install PyTorch with CUDA support for Windows
+        print("Installing PyTorch with CUDA support for Windows...")
         try:
-            run_command([pip_exe, "install", "-r", "requirements.txt"], check=False)
+            run_command([
+                pip_exe, "install", "torch", "torchvision", "torchaudio", 
+                "--index-url", "https://download.pytorch.org/whl/cu124"
+            ], check=False)
         except Exception as e:
-            print(f"Warning: Could not install requirements with pip: {e}")
+            print(f"Warning: Could not install PyTorch with CUDA: {e}")
+            print("Falling back to CPU-only PyTorch...")
+            run_command([pip_exe, "install", "torch", "torchvision", "torchaudio"], check=False)
+
+        # Install other requirements (excluding PyTorch packages)
+        print("Installing other requirements...")
+        try:
+            with open("requirements.txt", "r") as f:
+                requirements = f.read().splitlines()
+
+            # Filter out torch, torchvision, torchaudio as they're already installed
+            filtered_requirements = [
+                req
+                for req in requirements
+                if not req.startswith(("torch", "torchvision", "torchaudio", "#"))
+            ]
+
+            if filtered_requirements:
+                run_command([pip_exe, "install"] + filtered_requirements, check=False)
+        except Exception as e:
+            print(f"Warning: Could not install other requirements: {e}")
             print("Continuing with installation...")
     else:
         # For Unix-like systems, use the original approach
