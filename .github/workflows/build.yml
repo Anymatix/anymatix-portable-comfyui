@@ -105,6 +105,33 @@ jobs:
         run: |
           VERSION=$(jq -r 'map(.anymatix_version) | max' PIN.json)
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Clean existing assets for this tag (idempotent)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION=${{ steps.get-version.outputs.VERSION }}
+          OWNER_REPO="${GITHUB_REPOSITORY}"
+          API="https://api.github.com"
+          # Fetch release by tag; if missing, skip clean
+          REL_JSON=$(curl -s -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \
+            "${API}/repos/${OWNER_REPO}/releases/tags/v${VERSION}") || true
+          if echo "$REL_JSON" | jq -e '.id' >/dev/null 2>&1; then
+            REL_ID=$(echo "$REL_JSON" | jq -r '.id')
+            echo "Found release id: ${REL_ID} for tag v${VERSION}"
+            # Delete assets matching our bundle for this version
+            echo "$REL_JSON" | jq -r --arg ver "${VERSION}" \
+              '.assets[] | select(.name | test("^anymatix-portable-comfyui-.*-v" + $ver + "\\.zip(\\.part[0-9]{2})?$")) | .id, .name' |
+              while read -r ASSET_ID; do
+                read -r ASSET_NAME || true
+                echo "Deleting asset: ${ASSET_NAME} (${ASSET_ID})"
+                curl -s -X DELETE -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \
+                  "${API}/repos/${OWNER_REPO}/releases/assets/${ASSET_ID}" >/dev/null || true
+              done
+          else
+            echo "No existing release for v${VERSION}; skipping asset cleanup."
+          fi
           
       - name: Download all artifacts
         uses: actions/download-artifact@v4
