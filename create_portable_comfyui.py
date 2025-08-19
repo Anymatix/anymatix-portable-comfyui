@@ -352,7 +352,44 @@ def prune_environment() -> None:
                 except Exception:
                     pass
 
-    # 5) Trim non-runtime folders in site-packages (if exists)
+    # 5) Remove large, unused torch libs (Windows .lib files)
+    try:
+        torch_lib_dir = os.path.join(site_packages, "torch", "lib")
+        if os.path.isdir(torch_lib_dir):
+            # Windows: remove .lib import libraries (not needed at runtime)
+            large_libs_win = [
+                "dnnl.lib",
+                "libprotoc.lib",
+                "libprotobuf.lib",
+            ]
+            if system == "Windows":
+                for lib in large_libs_win:
+                    lib_path = os.path.join(torch_lib_dir, lib)
+                    if os.path.isfile(lib_path):
+                        try:
+                            os.remove(lib_path)
+                            print(f"Removed large unused torch lib: {lib_path}")
+                        except Exception as e:
+                            print(f"Warning: failed removing {lib_path}: {e}")
+            else:
+                # macOS/Linux: remove static archives if present (keep .dylib/.so)
+                large_archives_unix = [
+                    "libdnnl.a",
+                    "libprotoc.a",
+                    "libprotobuf.a",
+                ]
+                for lib in large_archives_unix:
+                    lib_path = os.path.join(torch_lib_dir, lib)
+                    if os.path.isfile(lib_path):
+                        try:
+                            os.remove(lib_path)
+                            print(f"Removed large unused torch archive: {lib_path}")
+                        except Exception as e:
+                            print(f"Warning: failed removing {lib_path}: {e}")
+    except Exception as e:
+        print(f"Warning: torch lib cleanup skipped: {e}")
+
+    # 6) Trim non-runtime folders in site-packages (if exists)
     trim_dirs = {
         "tests",
         "test",
