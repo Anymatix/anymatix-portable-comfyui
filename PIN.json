@@ -1,11 +1,11 @@
 [
     {
         "anymatix_version": "1.0.0-beta.1",
-        "comfyui_commit": "4977f203fa8e9e3ab22884c8ace8f9b540d48952",
+        "comfyui_commit": "7139d6d93fc7b5481a69b687080bd36f7b531c46",
         "custom_nodes": [
             {
                 "url": "https://github.com/Anymatix/anymatix-comfy-nodes.git",
-                "commit": "2111236ddb479c82eb1ad784c5c34f0593a58295"
+                "commit": "1a6998b662eb4983c15a0b261e29adacc6e392fc"
             },
             {
                 "url": "https://github.com/alessandrozonta/ComfyUI-CLIPSeg.git",
