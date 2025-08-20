@@ -451,58 +451,58 @@ def create_portable_python() -> None:
         else:
             # Platform-specific installation
             if platform.system() == "Windows":
-            # Determine if we're using compact (embeddable) or conda environment
-            conda_exe = os.path.join(PYTHON_DIR, "Scripts", "conda.exe")
-            pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
-            python_exe = os.path.join(PYTHON_DIR, "python.exe")
+                # Determine if we're using compact (embeddable) or conda environment
+                conda_exe = os.path.join(PYTHON_DIR, "Scripts", "conda.exe")
+                pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
+                python_exe = os.path.join(PYTHON_DIR, "python.exe")
             
-            if os.path.exists(conda_exe):
-                # Original conda-based installation
-                print("Using conda-based installation...")
-                
-                # Initialize conda for batch usage
-                print("Initializing conda...")
-                try:
-                    run_command([conda_exe, "init", "cmd.exe"], check=True)
-                    print("Conda initialized successfully")
-                except Exception as e:
-                    print(f"Warning: Could not initialize conda: {e}")
+                if os.path.exists(conda_exe):
+                    # Original conda-based installation
+                    print("Using conda-based installation...")
+                    
+                    # Initialize conda for batch usage
+                    print("Initializing conda...")
+                    try:
+                        run_command([conda_exe, "init", "cmd.exe"], check=True)
+                        print("Conda initialized successfully")
+                    except Exception as e:
+                        print(f"Warning: Could not initialize conda: {e}")
 
-                # Install Python 3.13 using conda
-                print("Installing Python 3.13...")
+                    # Install Python 3.13 using conda
+                    print("Installing Python 3.13...")
+                    try:
+                        run_command([conda_exe, "install", "-y", "python=3.13"], check=True)
+                        print("Python 3.13 installed successfully")
+                    except Exception as e:
+                        print(f"Error: Could not install Python 3.13 with conda: {e}")
+                        raise
+                else:
+                    # Compact embeddable Python - no conda setup needed, Python already there
+                    print("Using COMPACT embeddable Python installation...")
+                    print("Python 3.13 already available in embeddable package")
+
+                # Install PyTorch with CUDA support for Windows (same for both)
+                print("Installing PyTorch with CUDA support for Windows...")
                 try:
-                    run_command([conda_exe, "install", "-y", "python=3.13"], check=True)
-                    print("Python 3.13 installed successfully")
+                    run_command([
+                        pip_exe, "install", "torch", "torchvision", "torchaudio", 
+                        "--index-url", "https://download.pytorch.org/whl/cu124",
+                        "--no-cache-dir"  # Save space in compact version
+                    ], check=True)
+                    print("PyTorch with CUDA installed successfully")
                 except Exception as e:
-                    print(f"Error: Could not install Python 3.13 with conda: {e}")
-                    raise
+                    print(f"Warning: Could not install PyTorch with CUDA: {e}")
+                    print("Falling back to CPU-only PyTorch...")
+                    run_command([pip_exe, "install", "torch", "torchvision", "torchaudio", "--no-cache-dir"], check=True)
+                    print("CPU-only PyTorch installed successfully")
+
+                # Install other requirements will be handled in separate checkpoint step below
             else:
-                # Compact embeddable Python - no conda setup needed, Python already there
-                print("Using COMPACT embeddable Python installation...")
-                print("Python 3.13 already available in embeddable package")
+                # For Unix-like systems, use the original approach
+                conda_exe = os.path.join(PYTHON_DIR, "bin", "conda")
+                run_command([conda_exe, "install", "-y", "python=3.13"])
 
-            # Install PyTorch with CUDA support for Windows (same for both)
-            print("Installing PyTorch with CUDA support for Windows...")
-            try:
-                run_command([
-                    pip_exe, "install", "torch", "torchvision", "torchaudio", 
-                    "--index-url", "https://download.pytorch.org/whl/cu124",
-                    "--no-cache-dir"  # Save space in compact version
-                ], check=True)
-                print("PyTorch with CUDA installed successfully")
-            except Exception as e:
-                print(f"Warning: Could not install PyTorch with CUDA: {e}")
-                print("Falling back to CPU-only PyTorch...")
-                run_command([pip_exe, "install", "torch", "torchvision", "torchaudio", "--no-cache-dir"], check=True)
-                print("CPU-only PyTorch installed successfully")
-
-            # Install other requirements will be handled in separate checkpoint step below
-        else:
-            # For Unix-like systems, use the original approach
-            conda_exe = os.path.join(PYTHON_DIR, "bin", "conda")
-            run_command([conda_exe, "install", "-y", "python=3.13"])
-
-            pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
+                pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
 
             # For macOS with Apple Silicon, optimize NumPy with Accelerate framework
             if platform.system() == "Darwin" and platform.machine() == "arm64":
