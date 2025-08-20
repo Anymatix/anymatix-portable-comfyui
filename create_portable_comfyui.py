@@ -1404,7 +1404,7 @@ def create_zip_package() -> str:
     return zip_filename
 
 
-def split_file(file_path: str, part_size_bytes: int = 512 * 1024 * 1024) -> List[str]:
+def split_file(file_path: str, part_size_bytes: int = 100 * 1024 * 1024) -> List[str]:
     """Split a file into fixed-size parts. Returns the list of created part filenames.
 
     Parts are named: <file>.part01, <file>.part02, ...
@@ -1567,9 +1567,9 @@ def main() -> None:
 
     # If we're on CI, rename the zip file to a standard name for the artifact
     if args.ci and zip_filename and os.path.exists(zip_filename):
-            # Split zip into 512MB parts to bypass platform limits
-            print("Splitting zip into 512MB parts for CI uploads...")
-            parts = split_file(zip_filename, 512 * 1024 * 1024)
+            # Split zip into 100MB parts to bypass platform limits
+            print("Splitting zip into 100MB parts for CI uploads...")
+            parts = split_file(zip_filename, 100 * 1024 * 1024)
             if parts:
                 # Remove the original large zip to avoid double uploads
                 try:
@@ -1580,7 +1580,7 @@ def main() -> None:
                 for p in parts:
                     print(f" - {p}")
             else:
-                print("Zip smaller than 512MB; no splitting performed.")
+                print("Zip smaller than 100MB; no splitting performed.")
 
     # Push to GitHub if requested
     if args.push:
