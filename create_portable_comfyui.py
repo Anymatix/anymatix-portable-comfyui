@@ -295,6 +295,11 @@ def create_portable_python() -> None:
         run_command([python_exe, os.path.join(PYTHON_DIR, "get-pip.py")], check=True)
         os.remove(os.path.join(PYTHON_DIR, "get-pip.py"))
         
+        # Install essential build tools for embeddable Python
+        print("Installing essential build tools (setuptools, wheel)...")
+        pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
+        run_command([pip_exe, "install", "--upgrade", "setuptools", "wheel", "build"], check=True)
+        
         print("COMPACT Windows Python environment created successfully! (~90% size reduction)")
         
     else:
@@ -370,17 +375,6 @@ def create_portable_python() -> None:
                 print(f"Warning: Could not install PyTorch with CUDA: {e}")
                 print("Falling back to CPU-only PyTorch...")
                 run_command([pip_exe, "install", "torch", "torchvision", "torchaudio", "--no-cache-dir"], check=True)
-                print("CPU-only PyTorch installed successfully")
-            try:
-                run_command([
-                    pip_exe, "install", "torch", "torchvision", "torchaudio", 
-                    "--index-url", "https://download.pytorch.org/whl/cu124"
-                ], check=True)
-                print("PyTorch with CUDA installed successfully")
-            except Exception as e:
-                print(f"Warning: Could not install PyTorch with CUDA: {e}")
-                print("Falling back to CPU-only PyTorch...")
-                run_command([pip_exe, "install", "torch", "torchvision", "torchaudio"], check=True)
                 print("CPU-only PyTorch installed successfully")
 
             # Install other requirements will be handled in separate checkpoint step below
