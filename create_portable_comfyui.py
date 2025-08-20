@@ -263,32 +263,53 @@ def create_portable_python() -> None:
         print("Skipping Python environment creation (already completed)")
         return
 
-    # Download Miniforge installer
-    miniforge_url = get_miniforge_url()
-    miniforge_installer = os.path.basename(miniforge_url)
+    if platform.system() == "Windows":
+        # COMPACT VERSION: Use Python embeddable package instead of Miniforge (90% smaller!)
+        print("Creating COMPACT Windows Python environment...")
+        
+        # Download Python 3.13 embeddable package (~25MB vs 200MB+ Miniforge)
+        python_url = "https://www.python.org/ftp/python/3.13.0/python-3.13.0-embed-amd64.zip"
+        print(f"Downloading Python 3.13 embeddable package (COMPACT - ~25MB)...")
+        urllib.request.urlretrieve(python_url, "python_embed.zip")
+        
+        # Extract to python directory
+        os.makedirs(PYTHON_DIR, exist_ok=True)
+        with zipfile.ZipFile("python_embed.zip", 'r') as zip_ref:
+            zip_ref.extractall(PYTHON_DIR)
+        os.remove("python_embed.zip")
+        
+        # Enable pip by modifying python313._pth
+        pth_file = os.path.join(PYTHON_DIR, "python313._pth")
+        with open(pth_file, 'a') as f:
+            f.write("\nimport site\n")
+        
+        # Download and install pip
+        print("Installing pip...")
+        get_pip_url = "https://bootstrap.pypa.io/get-pip.py"
+        urllib.request.urlretrieve(get_pip_url, os.path.join(PYTHON_DIR, "get-pip.py"))
+        python_exe = os.path.join(PYTHON_DIR, "python.exe")
+        run_command([python_exe, os.path.join(PYTHON_DIR, "get-pip.py")], check=True)
+        os.remove(os.path.join(PYTHON_DIR, "get-pip.py"))
+        
+        print("COMPACT Windows Python environment created successfully! (~90% size reduction)")
+        
+    else:
+        # Original Miniforge approach for macOS/Linux (for now)
+        miniforge_url = get_miniforge_url()
+        miniforge_installer = os.path.basename(miniforge_url)
 
-    print(f"Downloading Miniforge from {miniforge_url}...")
-    urllib.request.urlretrieve(miniforge_url, miniforge_installer)
+        print(f"Downloading Miniforge from {miniforge_url}...")
+        urllib.request.urlretrieve(miniforge_url, miniforge_installer)
 
-    # Make the installer executable on Unix-like systems
-    if platform.system() != "Windows":
+        # Make the installer executable on Unix-like systems
         os.chmod(miniforge_installer, 0o755)
 
-    # Install Miniforge
-    print("Installing Miniforge...")
-    if platform.system() == "Windows":
-        # For Windows, use a more robust installation approach
-        install_cmd = [miniforge_installer, "/S", "/D=" + os.path.abspath(PYTHON_DIR)]
-        run_command(install_cmd)
-
-        # Wait for installation to complete
-        print("Waiting for installation to complete...")
-        time.sleep(10)
-    else:
+        # Install Miniforge
+        print("Installing Miniforge...")
         run_command([f"./{miniforge_installer}", "-b", "-p", PYTHON_DIR])
-
-    # Clean up installer
-    os.remove(miniforge_installer)
+        
+        # Clean up installer
+        os.remove(miniforge_installer)
 
     # Save checkpoint after Python environment creation
     save_checkpoint("create_python")
@@ -302,31 +323,50 @@ def create_portable_python() -> None:
     else:
         # Platform-specific installation
         if platform.system() == "Windows":
-            # On Windows, use a different approach to run conda
+            # Determine if we're using compact (embeddable) or conda environment
             conda_exe = os.path.join(PYTHON_DIR, "Scripts", "conda.exe")
             pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
+            python_exe = os.path.join(PYTHON_DIR, "python.exe")
+            
+            if os.path.exists(conda_exe):
+                # Original conda-based installation
+                print("Using conda-based installation...")
+                
+                # Initialize conda for batch usage
+                print("Initializing conda...")
+                try:
+                    run_command([conda_exe, "init", "cmd.exe"], check=True)
+                    print("Conda initialized successfully")
+                except Exception as e:
+                    print(f"Warning: Could not initialize conda: {e}")
 
-            # Initialize conda for batch usage
-            print("Initializing conda...")
-            try:
-                run_command([conda_exe, "init", "cmd.exe"], check=True)
-                print("Conda initialized successfully")
-            except Exception as e:
-                print(f"Warning: Could not initialize conda: {e}")
-                print("This may affect some conda operations but installation can continue...")
+                # Install Python 3.13 using conda
+                print("Installing Python 3.13...")
+                try:
+                    run_command([conda_exe, "install", "-y", "python=3.13"], check=True)
+                    print("Python 3.13 installed successfully")
+                except Exception as e:
+                    print(f"Error: Could not install Python 3.13 with conda: {e}")
+                    raise
+            else:
+                # Compact embeddable Python - no conda setup needed, Python already there
+                print("Using COMPACT embeddable Python installation...")
+                print("Python 3.13 already available in embeddable package")
 
-            # Install Python 3.13 using conda
-            print("Installing Python 3.13...")
-            try:
-                run_command([conda_exe, "install", "-y", "python=3.13"], check=True)
-                print("Python 3.13 installed successfully")
-            except Exception as e:
-                print(f"Error: Could not install Python 3.13 with conda: {e}")
-                print("This is a critical error - cannot continue without Python")
-                raise
-
-            # Install PyTorch with CUDA support for Windows
+            # Install PyTorch with CUDA support for Windows (same for both)
             print("Installing PyTorch with CUDA support for Windows...")
+            try:
+                run_command([
+                    pip_exe, "install", "torch", "torchvision", "torchaudio", 
+                    "--index-url", "https://download.pytorch.org/whl/cu124",
+                    "--no-cache-dir"  # Save space in compact version
+                ], check=True)
+                print("PyTorch with CUDA installed successfully")
+            except Exception as e:
+                print(f"Warning: Could not install PyTorch with CUDA: {e}")
+                print("Falling back to CPU-only PyTorch...")
+                run_command([pip_exe, "install", "torch", "torchvision", "torchaudio", "--no-cache-dir"], check=True)
+                print("CPU-only PyTorch installed successfully")
             try:
                 run_command([
                     pip_exe, "install", "torch", "torchvision", "torchaudio", 
