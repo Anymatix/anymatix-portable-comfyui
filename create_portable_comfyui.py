@@ -543,10 +543,34 @@ def prune_environment() -> None:
     except Exception as e:
         print(f"Warning: conda clean failed: {e}")
 
-    # 2) Purge pip cache
+    # 2) Purge pip cache (both portable environment and system cache)
     try:
         if os.path.exists(pip_exe):
+            # First try to purge using the portable pip
             run_command([pip_exe, "cache", "purge"], check=False)
+            
+            # Get the actual cache directory that pip uses (directly in Python)
+            try:
+                import tempfile
+                # Pip cache is typically in user's AppData/Local/pip/cache on Windows
+                # or ~/.cache/pip on Unix
+                if system == "Windows":
+                    cache_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "pip", "cache")
+                else:
+                    cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "pip")
+                
+                print(f"[INFO] Expected pip cache directory: {cache_dir}")
+                if os.path.isdir(cache_dir):
+                    try:
+                        # Remove the entire cache directory
+                        shutil.rmtree(cache_dir, ignore_errors=True)
+                        print(f"[INFO] Removed pip cache directory: {cache_dir}")
+                    except Exception as e:
+                        print(f"Warning: Could not remove pip cache dir {cache_dir}: {e}")
+                else:
+                    print("[INFO] Pip cache directory does not exist or already clean")
+            except Exception as e:
+                print(f"Warning: Could not determine pip cache directory: {e}")
     except Exception as e:
         print(f"Warning: pip cache purge failed: {e}")
 
