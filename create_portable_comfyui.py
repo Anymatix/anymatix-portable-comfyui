@@ -585,10 +585,11 @@ def prune_environment() -> None:
                 except Exception:
                     pass
 
-    # 5) Remove large, unused torch libs (Windows .lib files)
+    # 5) Remove large, unused torch libs (Windows .lib files) with timeout protection
     try:
         torch_lib_dir = os.path.join(site_packages, "torch", "lib")
         if os.path.isdir(torch_lib_dir):
+            print(f"Processing torch lib directory: {torch_lib_dir}")
             # Windows: remove .lib import libraries (not needed at runtime)
             large_libs_win = [
                 "dnnl.lib",
@@ -600,10 +601,20 @@ def prune_environment() -> None:
                     lib_path = os.path.join(torch_lib_dir, lib)
                     if os.path.isfile(lib_path):
                         try:
+                            print(f"Attempting to remove: {lib_path}")
+                            # Check file size before removal
+                            file_size = os.path.getsize(lib_path)
+                            print(f"File size: {file_size / (1024*1024):.1f} MB")
+                            
+                            # Force close any handles and remove readonly attribute
+                            import stat
+                            os.chmod(lib_path, stat.S_IWRITE)
                             os.remove(lib_path)
                             print(f"Removed large unused torch lib: {lib_path}")
                         except Exception as e:
                             print(f"Warning: failed removing {lib_path}: {e}")
+                            # If removal fails, try to continue with other files
+                            continue
             else:
                 # macOS/Linux: remove static archives if present (keep .dylib/.so)
                 large_archives_unix = [
@@ -615,12 +626,17 @@ def prune_environment() -> None:
                     lib_path = os.path.join(torch_lib_dir, lib)
                     if os.path.isfile(lib_path):
                         try:
+                            print(f"Attempting to remove: {lib_path}")
                             os.remove(lib_path)
                             print(f"Removed large unused torch archive: {lib_path}")
                         except Exception as e:
                             print(f"Warning: failed removing {lib_path}: {e}")
+        else:
+            print(f"Torch lib directory not found: {torch_lib_dir}")
     except Exception as e:
         print(f"Warning: torch lib cleanup skipped: {e}")
+    
+    print("Torch library cleanup completed, proceeding with next step...")
 
     # 6) Trim non-runtime folders in site-packages (if exists)
     trim_dirs = {
