@@ -167,18 +167,21 @@ def create_portable_python() -> None:
         # Initialize conda for batch usage
         print("Initializing conda...")
         try:
-            run_command([conda_exe, "init", "cmd.exe"], check=False)
+            run_command([conda_exe, "init", "cmd.exe"], check=True)
+            print("Conda initialized successfully")
         except Exception as e:
             print(f"Warning: Could not initialize conda: {e}")
-            print("Continuing with installation...")
+            print("This may affect some conda operations but installation can continue...")
 
         # Install Python 3.10 using conda
         print("Installing Python 3.10...")
         try:
-            run_command([conda_exe, "install", "-y", "python=3.10"], check=False)
+            run_command([conda_exe, "install", "-y", "python=3.10"], check=True)
+            print("Python 3.10 installed successfully")
         except Exception as e:
-            print(f"Warning: Could not install Python 3.10 with conda: {e}")
-            print("Continuing with installation...")
+            print(f"Error: Could not install Python 3.10 with conda: {e}")
+            print("This is a critical error - cannot continue without Python")
+            raise
 
         # Install PyTorch with CUDA support for Windows
         print("Installing PyTorch with CUDA support for Windows...")
@@ -186,11 +189,13 @@ def create_portable_python() -> None:
             run_command([
                 pip_exe, "install", "torch", "torchvision", "torchaudio", 
                 "--index-url", "https://download.pytorch.org/whl/cu124"
-            ], check=False)
+            ], check=True)
+            print("PyTorch with CUDA installed successfully")
         except Exception as e:
             print(f"Warning: Could not install PyTorch with CUDA: {e}")
             print("Falling back to CPU-only PyTorch...")
-            run_command([pip_exe, "install", "torch", "torchvision", "torchaudio"], check=False)
+            run_command([pip_exe, "install", "torch", "torchvision", "torchaudio"], check=True)
+            print("CPU-only PyTorch installed successfully")
 
         # Install other requirements (excluding PyTorch packages)
         print("Installing other requirements...")
@@ -206,10 +211,13 @@ def create_portable_python() -> None:
             ]
 
             if filtered_requirements:
-                run_command([pip_exe, "install"] + filtered_requirements, check=False)
+                result = run_command([pip_exe, "install"] + filtered_requirements, check=True)
+                print("Requirements installation completed successfully")
         except Exception as e:
-            print(f"Warning: Could not install other requirements: {e}")
-            print("Continuing with installation...")
+            print(f"Error: Could not install other requirements: {e}")
+            print("This is a critical error - the environment may be incomplete")
+            # Don't continue with check=False as this would create a broken environment
+            raise
     else:
         # For Unix-like systems, use the original approach
         conda_exe = os.path.join(PYTHON_DIR, "bin", "conda")
@@ -1180,6 +1188,26 @@ def trigger_github_workflow(workflow: str, branch: str) -> None:
     print("GitHub workflow triggered successfully.")
 
 
+def copy_requirements_txt() -> None:
+    """Copy requirements.txt to the anymatix directory for user reference."""
+    print("Copying requirements.txt to anymatix directory...")
+    
+    # Source requirements.txt (in the current working directory)
+    source_requirements = "requirements.txt"
+    
+    # Destination path in the anymatix directory
+    dest_requirements = os.path.join(ANYMATIX_DIR, "requirements.txt")
+    
+    try:
+        if os.path.exists(source_requirements):
+            shutil.copy2(source_requirements, dest_requirements)
+            print(f"Successfully copied requirements.txt to {dest_requirements}")
+        else:
+            print(f"Warning: requirements.txt not found at {source_requirements}")
+    except Exception as e:
+        print(f"Warning: Failed to copy requirements.txt: {e}")
+
+
 def main() -> None:
     """Main function."""
     args = parse_args()
@@ -1201,6 +1229,9 @@ def main() -> None:
 
     # Create launch script
     create_launch_script()
+
+    # Copy requirements.txt to the anymatix directory for user reference
+    copy_requirements_txt()
 
     # Create zip package
     zip_filename = create_zip_package()
