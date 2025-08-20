@@ -392,8 +392,9 @@ def create_portable_python() -> None:
                     # Skip if it becomes empty after removing comments
                     if not req:
                         continue
-                    # Skip if it's a torch package
-                    if req.lower().startswith(("torch", "torchvision", "torchaudio")):
+                    # Skip if it's one of the main torch packages we already installed
+                    req_name = req.lower().split('>=')[0].split('==')[0].split('~=')[0].split('<')[0].split('>')[0].strip()
+                    if req_name in ("torch", "torchvision", "torchaudio"):
                         continue
                     # Final check - only add non-empty, valid-looking requirements
                     if req and not req.isspace() and len(req) > 0:
@@ -436,8 +437,9 @@ def create_portable_python() -> None:
                     # Skip if it becomes empty after removing comments
                     if not req:
                         continue
-                    # Skip if it's a torch package
-                    if req.lower().startswith(("torch", "torchvision", "torchaudio")):
+                    # Skip if it's one of the main torch packages we already installed
+                    req_name = req.lower().split('>=')[0].split('==')[0].split('~=')[0].split('<')[0].split('>')[0].strip()
+                    if req_name in ("torch", "torchvision", "torchaudio"):
                         continue
                     # Final check - only add non-empty, valid-looking requirements
                     if req and not req.isspace() and len(req) > 0:
