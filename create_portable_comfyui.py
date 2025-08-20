@@ -588,35 +588,503 @@ exec "$SCRIPT_DIR/python/bin/python" main.py \\
 
     # Create the launch script for Windows
     elif system == "windows":
-        launch_script_path = os.path.join(ANYMATIX_DIR, "anymatix_comfyui.bat")
+        launch_script_path = os.path.join(ANYMATIX_DIR, "anymatix_comfyui_wrapper.ps1")
 
-        with open(launch_script_path, "w") as f:
-            f.write(
-                """@echo off
-REM Launch script for ComfyUI
+        with open(launch_script_path, "w", encoding='utf-8') as f:
+            f.write("""#Requires -Version 5.1
 
-REM Get the directory where this script is located
-set SCRIPT_DIR=%~dp0
+<#
+.SYNOPSIS
+    ComfyUI Launcher with Robust Process Management
+    
+.DESCRIPTION
+    A PowerShell-based launcher for ComfyUI that provides robust process tree management
+    using Windows Job Objects. This script replaces traditional batch file launchers
+    with comprehensive process lifecycle management.
+    
+    Key Features:
+    - Automatic process tree termination when parent process exits
+    - Windows Job Object integration for reliable cleanup
+    - Portable Python environment detection and usage
+    - Background monitoring without polling overhead
+    - Comprehensive error handling and cleanup
+    
+    Design Philosophy:
+    The script uses Windows Job Objects to ensure all child processes (ComfyUI Python
+    processes) are automatically terminated when the parent application exits, even
+    if the parent exits unexpectedly. Parent process monitoring uses efficient
+    WaitForSingleObject with infinite timeout instead of polling, eliminating
+    race conditions and reducing CPU overhead.
+    
+.PARAMETER Port
+    The port number for ComfyUI to listen on
+    Default: 8188
+    
+.PARAMETER Help
+    Display detailed help information about this script
+    
+.EXAMPLE
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "anymatix_comfyui_wrapper.ps1" -Port 8188
+    
+    Launches ComfyUI on port 8188 with automatic process management
+    
+.EXAMPLE 
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "anymatix_comfyui_wrapper.ps1" -Port 9800
+    
+    Launches ComfyUI on port 9800 with automatic process management
+    
+.NOTES
+    Requires PowerShell 5.1 or higher
+    Designed for Windows environments with Job Object support
+    Expects ComfyUI directory structure with portable Python environment
+#>
 
-REM Default port
-if "%1"=="" (
-    set PORT=8188
-) else (
-    set PORT=%1
+[CmdletBinding(DefaultParameterSetName='Run')]
+param(
+    [Parameter(ParameterSetName='Run')]
+    [int]$Port = 8188,
+    
+    [Parameter(ParameterSetName='Help', Mandatory)]
+    [switch]$Help
 )
 
-REM Change to the ComfyUI directory
-cd "%SCRIPT_DIR%ComfyUI"
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 
-REM Launch ComfyUI with the portable Python
-"%SCRIPT_DIR%python\\python.exe" main.py ^
-    --enable-cors-header ^
-    "*" ^
-    --force-fp16 ^
-    --preview-method=none ^
-    --port=%PORT%
-"""
-            )
+if ($Help) {
+    Get-Help $MyInvocation.MyCommand.Path -Full
+    exit 0
+}
+
+# Windows Job Objects P/Invoke definitions for process tree management
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class JobObject
+{
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr CreateJobObjectW(IntPtr lpJobAttributes, string lpName);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool SetInformationJobObject(IntPtr hJob, int JobObjectInformationClass,
+        IntPtr lpJobObjectInformation, uint cbJobObjectInformationLength);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool AssignProcessToJobObject(IntPtr hJob, IntPtr hProcess);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct JOBOBJECT_BASIC_LIMIT_INFORMATION
+    {
+        public long PerProcessUserTimeLimit;
+        public long PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public UIntPtr MinimumWorkingSetSize;
+        public UIntPtr MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public UIntPtr Affinity;
+        public uint PriorityClass;
+        public uint SchedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct IO_COUNTERS
+    {
+        public ulong ReadOperationCount;
+        public ulong WriteOperationCount;
+        public ulong OtherOperationCount;
+        public ulong ReadTransferCount;
+        public ulong WriteTransferCount;
+        public ulong OtherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+    {
+        public JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
+        public IO_COUNTERS IoInfo;
+        public UIntPtr ProcessMemoryLimit;
+        public UIntPtr JobMemoryLimit;
+        public UIntPtr PeakProcessMemoryUsed;
+        public UIntPtr PeakJobMemoryUsed;
+    }
+
+    public const int JobObjectExtendedLimitInformation = 9;
+    public const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;
+    public const uint SYNCHRONIZE = 0x00100000;
+    public const uint WAIT_OBJECT_0 = 0x00000000;
+    public const uint INFINITE = 0xFFFFFFFF;
+}
+"@
+
+# Global variables for process and job management
+$global:JobHandle = [IntPtr]::Zero
+$global:Process = $null
+$global:ProcessPID = $null
+$global:ParentMonitorJob = $null
+$global:OutputReader = $null
+$global:ErrorReader = $null
+
+# Process cleanup function - ensures all child processes are terminated
+function Cleanup {
+    Write-Host "Performing cleanup..." -ForegroundColor Yellow
+    
+    # Stop parent monitoring job if running
+    if ($global:ParentMonitorJob) {
+        try {
+            $global:ParentMonitorJob | Stop-Job -Force
+            $global:ParentMonitorJob | Remove-Job -Force
+        } catch { 
+            # Silent error handling for job cleanup
+        }
+        $global:ParentMonitorJob = $null
+    }
+    
+    # Stop async readers to prevent hanging processes
+    if ($global:Process) {
+        try {
+            $global:Process.CancelOutputRead()
+            $global:Process.CancelErrorRead()
+        } catch { 
+            # Silent error handling for reader cleanup
+        }
+    }
+    
+    # Dispose readers to free resources
+    if ($global:OutputReader) {
+        try { $global:OutputReader.Dispose() } catch { }
+        $global:OutputReader = $null
+    }
+    if ($global:ErrorReader) {
+        try { $global:ErrorReader.Dispose() } catch { }
+        $global:ErrorReader = $null
+    }
+    
+    # First attempt: Kill the process tree using taskkill (most reliable)
+    if ($global:ProcessPID) {
+        try {
+            Write-Host "Terminating ComfyUI process tree..." -ForegroundColor Yellow
+            Start-Process "taskkill" -ArgumentList "/F", "/T", "/PID", $global:ProcessPID -Wait -WindowStyle Hidden -NoNewWindow
+            Start-Sleep -Milliseconds 500  # Allow time for termination
+        } catch {
+            Write-Host "Process termination failed: $_" -ForegroundColor Yellow
+        }
+    }
+    
+    # Second attempt: Close job handle (kills all processes in the job)
+    if ($global:JobHandle -ne [IntPtr]::Zero) {
+        Write-Host "Closing job handle..." -ForegroundColor Yellow
+        [JobObject]::CloseHandle($global:JobHandle) | Out-Null
+        $global:JobHandle = [IntPtr]::Zero
+    }
+    
+    # Final cleanup: Process object disposal
+    if ($global:Process) {
+        try { 
+            if (-not $global:Process.HasExited) {
+                $global:Process.Kill($true)
+                $global:Process.WaitForExit(2000)
+            }
+            $global:Process.Dispose() 
+        } catch { 
+            # Silent error handling for process disposal
+        }
+        $global:Process = $null
+    }
+    
+    Write-Host "Cleanup completed" -ForegroundColor Green
+}
+
+# Event handlers for graceful shutdown on various exit scenarios
+$null = Register-ObjectEvent -InputObject ([System.Console]) -EventName CancelKeyPress -Action {
+    Write-Host "`nCtrl+C detected - cleaning up..." -ForegroundColor Yellow
+    Cleanup
+    [Environment]::Exit(0)
+}
+
+try {
+    # Resolve script directory and set up logging
+    $ScriptDir = $PSScriptRoot
+    if (-not $ScriptDir) {
+        $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    }
+    
+    Write-Host "=== ComfyUI Launcher Starting ===" -ForegroundColor Green
+    Write-Host "Script directory: $ScriptDir" -ForegroundColor Green
+    Write-Host "ComfyUI Port: $Port" -ForegroundColor Green
+    
+    # Path validation - ensure all required components exist
+    $ComfyUIDir = Join-Path $ScriptDir "ComfyUI"
+    $PythonExe = Join-Path $ScriptDir "python\\python.exe"
+    $MainPy = Join-Path $ComfyUIDir "main.py"
+    
+    if (-not (Test-Path $ComfyUIDir -PathType Container)) {
+        throw "ComfyUI directory not found: $ComfyUIDir"
+    }
+    
+    if (-not (Test-Path $PythonExe -PathType Leaf)) {
+        throw "Python executable not found: $PythonExe"
+    }
+    
+    if (-not (Test-Path $MainPy -PathType Leaf)) {
+        throw "ComfyUI main.py not found: $MainPy"
+    }
+    
+    Write-Host "All required files validated" -ForegroundColor Green
+    
+    # Parent process detection for automatic termination
+    $CurrentPID = [System.Diagnostics.Process]::GetCurrentProcess().Id
+    $ParentProcess = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $CurrentPID" | Select-Object -ExpandProperty ParentProcessId
+    
+    if (-not $ParentProcess) {
+        throw "Could not determine parent process ID for monitoring"
+    }
+    
+    Write-Host "Parent process monitoring enabled (PID: $ParentProcess)" -ForegroundColor Green
+    
+    # Verify parent process exists and get detailed info
+    try {
+        $parentProc = [System.Diagnostics.Process]::GetProcessById($ParentProcess)
+        $parentName = $parentProc.ProcessName
+        Write-Host "Parent process verified: $parentName (PID: $ParentProcess)" -ForegroundColor Green
+    }
+    catch {
+        Write-Warning "Cannot access parent process $ParentProcess - it may have already exited"
+    }
+    
+    # Windows Job Object creation - ensures process tree cleanup
+    $global:JobHandle = [JobObject]::CreateJobObjectW([IntPtr]::Zero, $null)
+    if ($global:JobHandle -eq [IntPtr]::Zero) {
+        throw "Failed to create job object"
+    }
+    
+    Write-Host "Job object created successfully" -ForegroundColor Green
+    
+    # Configure job object to terminate all child processes when job handle is closed
+    $extendedInfo = New-Object JobObject+JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+    $extendedInfo.BasicLimitInformation.LimitFlags = [JobObject]::JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    
+    $extendedInfoSize = [System.Runtime.InteropServices.Marshal]::SizeOf($extendedInfo)
+    $extendedInfoPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($extendedInfoSize)
+    
+    try {
+        [System.Runtime.InteropServices.Marshal]::StructureToPtr($extendedInfo, $extendedInfoPtr, $false)
+        
+        $result = [JobObject]::SetInformationJobObject(
+            $global:JobHandle, 
+            [JobObject]::JobObjectExtendedLimitInformation, 
+            $extendedInfoPtr, 
+            $extendedInfoSize
+        )
+        
+        if (-not $result) {
+            throw "Failed to set job object information"
+        }
+        
+        Write-Host "Job object configured for automatic process tree termination" -ForegroundColor Green
+    }
+    finally {
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($extendedInfoPtr)
+    }
+    
+    # Parent process monitoring setup - uses efficient blocking wait instead of polling
+    $parentWaitScript = {
+        param($ParentPID)
+        
+        # P/Invoke definitions for efficient parent process monitoring
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class ParentWaiter
+{
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool CloseHandle(IntPtr hObject);
+
+    public const uint SYNCHRONIZE = 0x00100000;
+    public const uint WAIT_OBJECT_0 = 0x00000000;
+    public const uint INFINITE = 0xFFFFFFFF;
+}
+"@
+
+        $parentHandle = [ParentWaiter]::OpenProcess([ParentWaiter]::SYNCHRONIZE, $false, $ParentPID)
+        
+        if ($parentHandle -ne [IntPtr]::Zero) {
+            # Efficient blocking wait - no CPU usage until parent exits
+            try {
+                [ParentWaiter]::WaitForSingleObject($parentHandle, [ParentWaiter]::INFINITE) | Out-Null
+                return $true
+            }
+            finally {
+                [ParentWaiter]::CloseHandle($parentHandle) | Out-Null
+            }
+        }
+        else {
+            # Fallback: polling method if handle opening fails
+            while ($true) {
+                try {
+                    $proc = [System.Diagnostics.Process]::GetProcessById($ParentPID)
+                    if ($proc.HasExited) {
+                        return $true
+                    }
+                }
+                catch {
+                    # Parent process no longer exists
+                    return $true
+                }
+                Start-Sleep -Seconds 1
+            }
+        }
+        
+        return $false
+    }
+    
+    # Start parent monitoring in background job
+    $global:ParentMonitorJob = Start-Job -ScriptBlock $parentWaitScript -ArgumentList $ParentProcess
+    
+    Write-Host "Parent process monitoring started" -ForegroundColor Green
+    
+    # ComfyUI process configuration
+    $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $processInfo.FileName = $PythonExe
+    $processInfo.Arguments = "main.py --enable-cors-header `"*`" --force-fp16 --preview-method=none --port=$Port"
+    $processInfo.WorkingDirectory = $ComfyUIDir
+    $processInfo.UseShellExecute = $false
+    $processInfo.RedirectStandardOutput = $true
+    $processInfo.RedirectStandardError = $true
+    $processInfo.CreateNoWindow = $false  # Allow console window for ComfyUI output
+    
+    Write-Host "Starting ComfyUI process..." -ForegroundColor Green
+    Write-Host "Command: $($processInfo.FileName) $($processInfo.Arguments)" -ForegroundColor Cyan
+    Write-Host "Working Directory: $($processInfo.WorkingDirectory)" -ForegroundColor Cyan
+    
+    # Create and configure the process object
+    $global:Process = New-Object System.Diagnostics.Process
+    $global:Process.StartInfo = $processInfo
+    
+    # Set up async output reading for real-time display
+    $global:Process.EnableRaisingEvents = $true
+    
+    # Start the ComfyUI process
+    $started = $global:Process.Start()
+    if (-not $started) {
+        throw "Failed to start ComfyUI process"
+    }
+    
+    $processPID = $global:Process.Id
+    Write-Host "ComfyUI process started with PID: $processPID" -ForegroundColor Green
+    
+    # Assign process to job object for automatic cleanup
+    $assignResult = [JobObject]::AssignProcessToJobObject($global:JobHandle, $global:Process.Handle)
+    if (-not $assignResult) {
+        Write-Warning "Failed to assign process to job object - cleanup may not be automatic"
+        Write-Host "Will use alternative cleanup methods" -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "Process assigned to job object - automatic cleanup enabled" -ForegroundColor Green
+    }
+    
+    # Store process ID for cleanup operations
+    $global:ProcessPID = $processPID
+    
+    # Begin async output reading for real-time console display
+    $global:Process.BeginOutputReadLine()
+    $global:Process.BeginErrorReadLine()
+    
+    # Event handlers for output streams - filter duplicate stderr messages
+    Register-ObjectEvent -InputObject $global:Process -EventName OutputDataReceived -Action {
+        $data = $Event.SourceEventArgs.Data
+        if ($data) {
+            Write-Host $data
+        }
+    } | Out-Null
+    
+    Register-ObjectEvent -InputObject $global:Process -EventName ErrorDataReceived -Action {
+        $data = $Event.SourceEventArgs.Data
+        # Filter common duplicate messages that appear in both stdout and stderr
+        if ($data -and $data -notmatch "^(Total VRAM|pytorch version|Set vram state|Device:|Using pytorch|Python version|ComfyUI version|Import times|Starting server|To see the GUI|Context impl|Will assume|No target revision)") {
+            Write-Host $data -ForegroundColor Red
+        }
+    } | Out-Null
+    
+    # Process exit event handler
+    Register-ObjectEvent -InputObject $global:Process -EventName Exited -Action {
+        $exitCode = $Event.Sender.ExitCode
+        Write-Host "ComfyUI process exited with code: $exitCode" -ForegroundColor Yellow
+        [Environment]::Exit($exitCode)
+    } | Out-Null
+    
+    Write-Host "ComfyUI is starting up..." -ForegroundColor Green
+    Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
+    
+    # Main monitoring loop - wait for parent exit or ComfyUI completion
+    while ($true) {
+        # Check if parent monitoring completed (parent exited)
+        if ($global:ParentMonitorJob.State -eq "Completed") {
+            Write-Host "Parent process exited - shutting down ComfyUI" -ForegroundColor Yellow
+            break
+        }
+        
+        # Check if parent monitoring failed
+        if ($global:ParentMonitorJob.State -eq "Failed") {
+            Write-Host "Parent monitoring failed - shutting down ComfyUI" -ForegroundColor Red
+            break
+        }
+        
+        # Check if ComfyUI process exited naturally
+        if ($global:Process.HasExited) {
+            Write-Host "ComfyUI process exited naturally" -ForegroundColor Green
+            break
+        }
+        
+        Start-Sleep -Seconds 1
+    }
+    
+    # Determine exit reason and perform cleanup
+    $exitCode = 0
+    if ($global:Process -and -not $global:Process.HasExited) {
+        # Process is still running - we're exiting due to parent termination
+        Write-Host "Terminating ComfyUI due to parent exit..." -ForegroundColor Yellow
+    }
+    elseif ($global:Process) {
+        $exitCode = $global:Process.ExitCode
+        Write-Host "ComfyUI exited with code: $exitCode" -ForegroundColor Yellow
+    }
+    
+    # Cleanup and exit
+    Cleanup
+    
+    # Force exit to ensure script terminates
+    Write-Host "Script exiting with code: $exitCode" -ForegroundColor Green
+    [Environment]::Exit($exitCode)
+}
+catch {
+    Write-Error "Error in ComfyUI launcher: $_"
+    Write-Error $_.ScriptStackTrace
+    Cleanup
+    [Environment]::Exit(1)
+}
+finally {
+    # Ensure cleanup always runs
+    Write-Host "Finally block - ensuring cleanup" -ForegroundColor Yellow
+    Cleanup
+}
+""")
 
     print("Launch scripts created successfully.")
 
