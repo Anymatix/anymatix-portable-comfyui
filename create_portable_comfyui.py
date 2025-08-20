@@ -29,6 +29,7 @@ COMFYUI_DIR = os.path.join(ANYMATIX_DIR, "ComfyUI")
 CUSTOM_NODES_DIR = os.path.join(COMFYUI_DIR, "custom_nodes")
 COMFYUI_REPO = "https://github.com/comfyanonymous/ComfyUI.git"
 MINIFORGE_BASE_URL = "https://github.com/conda-forge/miniforge/releases/latest/download"
+CHECKPOINT_FILE = os.path.join(ANYMATIX_DIR, ".build_checkpoint")
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,6 +45,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--workflow", default="build.yml", help="Workflow file name")
     parser.add_argument("--branch", default="main", help="Branch to push to")
+    parser.add_argument(
+        "--reset", action="store_true", help="Reset checkpoint and start fresh build"
+    )
     return parser.parse_args()
 
 
@@ -125,9 +129,80 @@ def run_command(
         return e
 
 
+# Resume functionality
+def save_checkpoint(step: str) -> None:
+    """Save the current build step to a checkpoint file (disabled in CI mode)."""
+    # Skip checkpoints in CI mode to ensure clean builds
+    if hasattr(save_checkpoint, '_ci_mode') and save_checkpoint._ci_mode:
+        return
+        
+    checkpoint_file = os.path.join(ANYMATIX_DIR, ".build_checkpoint")
+    try:
+        os.makedirs(os.path.dirname(checkpoint_file), exist_ok=True)
+        with open(checkpoint_file, "w") as f:
+            f.write(step)
+        print(f"Checkpoint saved: {step}")
+    except Exception as e:
+        print(f"Warning: Could not save checkpoint: {e}")
+
+
+def load_checkpoint() -> Optional[str]:
+    """Load the last completed build step from checkpoint file (disabled in CI mode)."""
+    # Skip checkpoints in CI mode to ensure clean builds
+    if hasattr(load_checkpoint, '_ci_mode') and load_checkpoint._ci_mode:
+        return None
+        
+    checkpoint_file = os.path.join(ANYMATIX_DIR, ".build_checkpoint")
+    try:
+        if os.path.exists(checkpoint_file):
+            with open(checkpoint_file, "r") as f:
+                step = f.read().strip()
+            print(f"Found checkpoint: {step}")
+            return step
+    except Exception as e:
+        print(f"Warning: Could not load checkpoint: {e}")
+    return None
+
+
+def should_skip_step(current_step: str, last_completed: Optional[str]) -> bool:
+    """Check if the current step should be skipped based on the checkpoint (disabled in CI mode)."""
+    # Never skip steps in CI mode to ensure clean builds
+    if hasattr(should_skip_step, '_ci_mode') and should_skip_step._ci_mode:
+        return False
+        
+    if not last_completed:
+        return False
+    
+    # Define the order of build steps
+    build_steps = [
+        "create_python",
+        "install_python",
+        "install_pytorch", 
+        "install_requirements",
+        "prune_environment",
+        "clone_comfyui",
+        "clone_custom_nodes",
+        "create_launch_script"
+    ]
+    
+    try:
+        last_index = build_steps.index(last_completed)
+        current_index = build_steps.index(current_step)
+        return current_index <= last_index
+    except ValueError:
+        return False
+
+
 def create_portable_python() -> None:
     """Create a portable Python environment using Miniforge."""
+    last_checkpoint = load_checkpoint()
+    
     print("Creating portable Python environment...")
+    
+    # Check if we should skip Python environment creation
+    if should_skip_step("create_python", last_checkpoint):
+        print("Skipping Python environment creation (already completed)")
+        return
 
     # Download Miniforge installer
     miniforge_url = get_miniforge_url()
@@ -156,118 +231,185 @@ def create_portable_python() -> None:
     # Clean up installer
     os.remove(miniforge_installer)
 
+    # Save checkpoint after Python environment creation
+    save_checkpoint("create_python")
+
     # Install required packages
     print("Installing required packages...")
-
-    if platform.system() == "Windows":
-        # On Windows, use a different approach to run conda
-        conda_exe = os.path.join(PYTHON_DIR, "Scripts", "conda.exe")
-        pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
-
-        # Initialize conda for batch usage
-        print("Initializing conda...")
-        try:
-            run_command([conda_exe, "init", "cmd.exe"], check=True)
-            print("Conda initialized successfully")
-        except Exception as e:
-            print(f"Warning: Could not initialize conda: {e}")
-            print("This may affect some conda operations but installation can continue...")
-
-        # Install Python 3.10 using conda
-        print("Installing Python 3.10...")
-        try:
-            run_command([conda_exe, "install", "-y", "python=3.10"], check=True)
-            print("Python 3.10 installed successfully")
-        except Exception as e:
-            print(f"Error: Could not install Python 3.10 with conda: {e}")
-            print("This is a critical error - cannot continue without Python")
-            raise
-
-        # Install PyTorch with CUDA support for Windows
-        print("Installing PyTorch with CUDA support for Windows...")
-        try:
-            run_command([
-                pip_exe, "install", "torch", "torchvision", "torchaudio", 
-                "--index-url", "https://download.pytorch.org/whl/cu124"
-            ], check=True)
-            print("PyTorch with CUDA installed successfully")
-        except Exception as e:
-            print(f"Warning: Could not install PyTorch with CUDA: {e}")
-            print("Falling back to CPU-only PyTorch...")
-            run_command([pip_exe, "install", "torch", "torchvision", "torchaudio"], check=True)
-            print("CPU-only PyTorch installed successfully")
-
-        # Install other requirements (excluding PyTorch packages)
-        print("Installing other requirements...")
-        try:
-            with open("requirements.txt", "r") as f:
-                requirements = f.read().splitlines()
-
-            # Filter out torch, torchvision, torchaudio as they're already installed
-            filtered_requirements = [
-                req
-                for req in requirements
-                if not req.startswith(("torch", "torchvision", "torchaudio", "#"))
-            ]
-
-            if filtered_requirements:
-                result = run_command([pip_exe, "install"] + filtered_requirements, check=True)
-                print("Requirements installation completed successfully")
-        except Exception as e:
-            print(f"Error: Could not install other requirements: {e}")
-            print("This is a critical error - the environment may be incomplete")
-            # Don't continue with check=False as this would create a broken environment
-            raise
+    
+    # Check if we should skip Python installation
+    if should_skip_step("install_python", last_checkpoint):
+        print("Skipping Python installation (already completed)")
     else:
-        # For Unix-like systems, use the original approach
-        conda_exe = os.path.join(PYTHON_DIR, "bin", "conda")
-        run_command([conda_exe, "install", "-y", "python=3.10"])
+        # Platform-specific installation
+        if platform.system() == "Windows":
+            # On Windows, use a different approach to run conda
+            conda_exe = os.path.join(PYTHON_DIR, "Scripts", "conda.exe")
+            pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
 
-        pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
+            # Initialize conda for batch usage
+            print("Initializing conda...")
+            try:
+                run_command([conda_exe, "init", "cmd.exe"], check=True)
+                print("Conda initialized successfully")
+            except Exception as e:
+                print(f"Warning: Could not initialize conda: {e}")
+                print("This may affect some conda operations but installation can continue...")
 
-        # For macOS with Apple Silicon, optimize NumPy with Accelerate framework
-        if platform.system() == "darwin" and platform.machine() == "arm64":
-            print("Optimizing for Apple Silicon...")
-            # Install NumPy with Accelerate framework
-            run_command(
-                [
-                    conda_exe,
-                    "install",
-                    "-y",
-                    "-c",
-                    "conda-forge",
-                    "libblas=*=*accelerate",
-                ]
-            )
+            # Install Python 3.13 using conda
+            print("Installing Python 3.13...")
+            try:
+                run_command([conda_exe, "install", "-y", "python=3.13"], check=True)
+                print("Python 3.13 installed successfully")
+            except Exception as e:
+                print(f"Error: Could not install Python 3.13 with conda: {e}")
+                print("This is a critical error - cannot continue without Python")
+                raise
 
-            # Pin libblas to use accelerate
-            conda_meta_dir = os.path.join(PYTHON_DIR, "conda-meta")
-            os.makedirs(conda_meta_dir, exist_ok=True)
-            with open(os.path.join(conda_meta_dir, "pinned"), "a") as f:
-                f.write("libblas=*=*accelerate\n")
+            # Install PyTorch with CUDA support for Windows
+            print("Installing PyTorch with CUDA support for Windows...")
+            try:
+                run_command([
+                    pip_exe, "install", "torch", "torchvision", "torchaudio", 
+                    "--index-url", "https://download.pytorch.org/whl/cu124"
+                ], check=True)
+                print("PyTorch with CUDA installed successfully")
+            except Exception as e:
+                print(f"Warning: Could not install PyTorch with CUDA: {e}")
+                print("Falling back to CPU-only PyTorch...")
+                run_command([pip_exe, "install", "torch", "torchvision", "torchaudio"], check=True)
+                print("CPU-only PyTorch installed successfully")
 
-            # Install PyTorch with MPS support
-            run_command(
-                [pip_exe, "install", "torch>=2.1.0", "torchvision", "torchaudio"]
-            )
-
-            # Install other requirements
-            with open("requirements.txt", "r") as f:
-                requirements = f.read().splitlines()
-
-            # Filter out torch, torchvision, torchaudio as they're already installed
-            filtered_requirements = [
-                req
-                for req in requirements
-                if not req.startswith(("torch", "torchvision", "torchaudio", "#"))
-            ]
-
-            if filtered_requirements:
-                run_command([pip_exe, "install"] + filtered_requirements)
+            # Install other requirements will be handled in separate checkpoint step below
         else:
-            # For other platforms, install all requirements normally
-            run_command([pip_exe, "install", "-r", "requirements.txt"])
+            # For Unix-like systems, use the original approach
+            conda_exe = os.path.join(PYTHON_DIR, "bin", "conda")
+            run_command([conda_exe, "install", "-y", "python=3.13"])
 
+            pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
+
+            # For macOS with Apple Silicon, optimize NumPy with Accelerate framework
+            if platform.system() == "Darwin" and platform.machine() == "arm64":
+                print("Optimizing for Apple Silicon...")
+                # Install NumPy with Accelerate framework
+                run_command(
+                    [
+                        conda_exe,
+                        "install",
+                        "-y",
+                        "-c",
+                        "conda-forge",
+                        "libblas=*=*accelerate",
+                    ]
+                )
+
+                # Pin libblas to use accelerate
+                conda_meta_dir = os.path.join(PYTHON_DIR, "conda-meta")
+                os.makedirs(conda_meta_dir, exist_ok=True)
+                with open(os.path.join(conda_meta_dir, "pinned"), "a") as f:
+                    f.write("libblas=*=*accelerate\n")
+
+                # Install PyTorch with MPS support
+                run_command(
+                    [pip_exe, "install", "torch>=2.1.0", "torchvision", "torchaudio"]
+                )
+
+                # Install other requirements
+                with open("requirements.txt", "r") as f:
+                    requirements = f.read().splitlines()
+
+                # Filter out torch, torchvision, torchaudio as they're already installed
+                # Also clean up requirements by removing comments and empty lines
+                filtered_requirements = []
+                for req in requirements:
+                    # Strip whitespace
+                    req = req.strip()
+                    # Skip empty lines and comment lines
+                    if not req or req.startswith("#"):
+                        continue
+                    # Remove inline comments (everything after #)
+                    if "#" in req:
+                        req = req.split("#")[0].strip()
+                    # Skip if it becomes empty after removing comments
+                    if not req:
+                        continue
+                    # Skip if it's a torch package
+                    if req.lower().startswith(("torch", "torchvision", "torchaudio")):
+                        continue
+                    # Final check - only add non-empty, valid-looking requirements
+                    if req and not req.isspace() and len(req) > 0:
+                        filtered_requirements.append(req)
+
+                if filtered_requirements:
+                    run_command([pip_exe, "install"] + filtered_requirements)
+            else:
+                # For other Unix platforms, install all requirements normally
+                run_command([pip_exe, "install", "-r", "requirements.txt"])
+
+        # Save checkpoint after PyTorch installation but before other requirements
+        save_checkpoint("install_pytorch")
+        
+        # Now install other requirements as a separate checkpointed step  
+        if should_skip_step("install_requirements", last_checkpoint):
+            print("Skipping requirements installation (already completed)")
+        else:
+            print("Installing remaining requirements...")
+            # Requirements installation code goes here (moved from above)
+            # This step was previously included in "install_python" checkpoint
+            
+            # Re-read the requirements filtering logic for the separate step
+            try:
+                with open("requirements.txt", "r") as f:
+                    requirements = f.read().splitlines()
+
+                # Filter out torch, torchvision, torchaudio as they're already installed
+                # Also clean up requirements by removing comments and empty lines
+                filtered_requirements = []
+                for req in requirements:
+                    # Strip whitespace
+                    req = req.strip()
+                    # Skip empty lines and comment lines
+                    if not req or req.startswith("#"):
+                        continue
+                    # Remove inline comments (everything after #)
+                    if "#" in req:
+                        req = req.split("#")[0].strip()
+                    # Skip if it becomes empty after removing comments
+                    if not req:
+                        continue
+                    # Skip if it's a torch package
+                    if req.lower().startswith(("torch", "torchvision", "torchaudio")):
+                        continue
+                    # Final check - only add non-empty, valid-looking requirements
+                    if req and not req.isspace() and len(req) > 0:
+                        filtered_requirements.append(req)
+
+                # Debug output to see what we're about to install
+                print(f"Filtered requirements ({len(filtered_requirements)} packages):")
+                for i, req in enumerate(filtered_requirements):
+                    print(f"  {i+1:2d}: '{req}'")
+
+                if filtered_requirements:
+                    print(f"Installing {len(filtered_requirements)} packages...")
+                    if platform.system() == "Windows":
+                        pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
+                    else:
+                        pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
+                    result = run_command([pip_exe, "install"] + filtered_requirements, check=True)
+                    print("Requirements installation completed successfully")
+                else:
+                    print("No requirements to install after filtering")
+            except Exception as e:
+                print(f"Error: Could not install other requirements: {e}")
+                print("This is a critical error - the environment may be incomplete")
+                # Don't continue with check=False as this would create a broken environment
+                raise
+                
+            save_checkpoint("install_requirements")
+
+        # Save final checkpoint after all Python setup is complete  
+        save_checkpoint("install_python")
+            
     # Set executable permissions on files in python/bin directory for Unix-like systems
     if platform.system() != "Windows":
         bin_dir = os.path.join(PYTHON_DIR, "bin")
@@ -319,7 +461,7 @@ def prune_environment() -> None:
         conda_exe = os.path.join(PYTHON_DIR, "bin", "conda")
         pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
         # Typical conda prefix layout on Unix
-        site_packages = os.path.join(PYTHON_DIR, "lib", "python3.10", "site-packages")
+        site_packages = os.path.join(PYTHON_DIR, "lib", "python3.13", "site-packages")
         conda_pkgs_dir = os.path.join(PYTHON_DIR, "pkgs")
 
     # 1) Clean conda caches
@@ -467,6 +609,9 @@ def clone_comfyui() -> None:
     run_command(["git", "clone", COMFYUI_REPO, COMFYUI_DIR])
     run_command(["git", "-C", COMFYUI_DIR, "checkout", comfyui_commit])
     print(f"ComfyUI repository cloned and checked out to {comfyui_commit}.")
+    
+    # Save checkpoint after ComfyUI cloning
+    save_checkpoint("clone_comfyui")
 
 
 def clone_custom_nodes() -> None:
@@ -510,6 +655,9 @@ def clone_custom_nodes() -> None:
             print(f"No pin found for {repo_url}, using default branch HEAD.")
 
     print("Custom node repositories cloned and pinned successfully.")
+    
+    # Save checkpoint after custom nodes cloning
+    save_checkpoint("clone_custom_nodes")
 
 
 def create_launch_script() -> None:
@@ -1119,7 +1267,7 @@ def create_zip_package() -> str:
         print("Falling back to Python's zipfile with compresslevel=9")
 
     compression_method = zipfile.ZIP_DEFLATED
-    # Python 3.10 supports compresslevel for ZIP_DEFLATED
+    # Python 3.13 supports compresslevel for ZIP_DEFLATED
     with zipfile.ZipFile(zip_filename, "w", compression_method, compresslevel=9) as zipf:
         for root, _, files in os.walk(ANYMATIX_DIR):
             for file in files:
@@ -1215,43 +1363,105 @@ def main() -> None:
     # Create anymatix directory
     os.makedirs(ANYMATIX_DIR, exist_ok=True)
 
+    # Configure checkpoint behavior based on CI mode
+    if args.ci:
+        print("CI mode detected - checkpoints disabled for clean builds")
+        # Set CI mode flag on checkpoint functions
+        save_checkpoint._ci_mode = True
+        load_checkpoint._ci_mode = True
+        should_skip_step._ci_mode = True
+        # Clean up any existing checkpoint from previous runs
+        checkpoint_path = os.path.join(ANYMATIX_DIR, ".build_checkpoint")
+        if os.path.exists(checkpoint_path):
+            os.remove(checkpoint_path)
+            print("Removed stale checkpoint file")
+    else:
+        print("Local build mode - checkpoints enabled for resumable builds")
+
+    # Handle reset flag - clear checkpoint if requested (only in local mode)
+    if args.reset and not args.ci and os.path.exists(CHECKPOINT_FILE):
+        os.remove(CHECKPOINT_FILE)
+        print("Checkpoint cleared - starting fresh build")
+
+    # Load checkpoint to enable resume functionality (disabled in CI mode)
+    last_checkpoint = load_checkpoint()
+    if last_checkpoint:
+        print(f"Resuming from checkpoint: {last_checkpoint}")
+    else:
+        if args.ci:
+            print("Starting clean CI build")
+        else:
+            print("Starting fresh build (no checkpoint found)")
+
     # Create portable Python environment
-    create_portable_python()
+    if should_skip_step("create_python", last_checkpoint):
+        print("Skipping Python environment creation (already completed)")
+    else:
+        create_portable_python()
 
     # Prune environment to reduce artifact size (all platforms)
-    prune_environment()
+    if should_skip_step("prune_environment", last_checkpoint):
+        print("Skipping environment pruning (already completed)")
+    else:
+        prune_environment()
+        save_checkpoint("prune_environment")
 
     # Clone ComfyUI repository
-    clone_comfyui()
+    if should_skip_step("clone_comfyui", last_checkpoint):
+        print("Skipping ComfyUI cloning (already completed)")
+    else:
+        clone_comfyui()
 
     # Clone custom node repositories
-    clone_custom_nodes()
+    if should_skip_step("clone_custom_nodes", last_checkpoint):
+        print("Skipping custom nodes cloning (already completed)")
+    else:
+        clone_custom_nodes()
 
     # Create launch script
-    create_launch_script()
+    if should_skip_step("create_launch_script", last_checkpoint):
+        print("Skipping launch script creation (already completed)")
+    else:
+        create_launch_script()
+        save_checkpoint("create_launch_script")
 
     # Copy requirements.txt to the anymatix directory for user reference
-    copy_requirements_txt()
+    if should_skip_step("copy_requirements", last_checkpoint):
+        print("Skipping requirements.txt copying (already completed)")
+    else:
+        copy_requirements_txt()
+        save_checkpoint("copy_requirements")
 
     # Create zip package
-    zip_filename = create_zip_package()
+    zip_filename = None
+    if should_skip_step("create_zip", last_checkpoint):
+        print("Skipping zip creation (already completed)")
+        # Try to find existing zip file for CI processing
+        import glob
+        zip_files = glob.glob("anymatix-*.zip")
+        if zip_files:
+            zip_filename = zip_files[0]  # Use the first found zip file
+            print(f"Found existing zip file: {zip_filename}")
+    else:
+        zip_filename = create_zip_package()
+        save_checkpoint("create_zip")
 
     # If we're on CI, rename the zip file to a standard name for the artifact
-    if args.ci:
-        # Split zip into 512MB parts to bypass platform limits
-        print("Splitting zip into 512MB parts for CI uploads...")
-        parts = split_file(zip_filename, 512 * 1024 * 1024)
-        if parts:
-            # Remove the original large zip to avoid double uploads
-            try:
-                os.remove(zip_filename)
-            except Exception as e:
-                print(f"Warning: failed to remove original zip {zip_filename}: {e}")
-            print("Created parts:")
-            for p in parts:
-                print(f" - {p}")
-        else:
-            print("Zip smaller than 512MB; no splitting performed.")
+    if args.ci and zip_filename and os.path.exists(zip_filename):
+            # Split zip into 512MB parts to bypass platform limits
+            print("Splitting zip into 512MB parts for CI uploads...")
+            parts = split_file(zip_filename, 512 * 1024 * 1024)
+            if parts:
+                # Remove the original large zip to avoid double uploads
+                try:
+                    os.remove(zip_filename)
+                except Exception as e:
+                    print(f"Warning: failed to remove original zip {zip_filename}: {e}")
+                print("Created parts:")
+                for p in parts:
+                    print(f" - {p}")
+            else:
+                print("Zip smaller than 512MB; no splitting performed.")
 
     # Push to GitHub if requested
     if args.push:
@@ -1260,6 +1470,11 @@ def main() -> None:
     # Trigger GitHub workflow if requested
     if args.trigger_workflow:
         trigger_github_workflow(args.workflow, args.branch)
+
+    # Clear checkpoint on successful completion (only in local mode)
+    if not args.ci and os.path.exists(CHECKPOINT_FILE):
+        os.remove(CHECKPOINT_FILE)
+        print("Build completed successfully - checkpoint cleared")
 
     print("Portable ComfyUI package created successfully.")
 
