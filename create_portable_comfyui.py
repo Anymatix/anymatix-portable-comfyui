@@ -449,8 +449,8 @@ def create_portable_python() -> None:
         if should_skip_step("install_python", last_checkpoint):
             print("Skipping Python installation (already completed)")
         else:
-        # Platform-specific installation
-        if platform.system() == "Windows":
+            # Platform-specific installation
+            if platform.system() == "Windows":
             # Determine if we're using compact (embeddable) or conda environment
             conda_exe = os.path.join(PYTHON_DIR, "Scripts", "conda.exe")
             pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
