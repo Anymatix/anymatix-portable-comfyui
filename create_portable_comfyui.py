@@ -252,6 +252,113 @@ def should_skip_step(current_step: str, last_completed: Optional[str]) -> bool:
         return False
 
 
+def create_bootstrap_script() -> None:
+    """Create bootstrap script that installs Python packages on first run."""
+    bootstrap_script = f"""#!/usr/bin/env python3
+\"\"\"
+Bootstrap script for Anymatix Portable ComfyUI
+Installs Python packages on first run with progress reporting.
+\"\"\"
+import os
+import sys
+import subprocess
+import json
+import time
+
+def report_progress(percentage, message):
+    \"\"\"Report progress in the same format the app expects.\"\"\"
+    progress_data = {{
+        "type": "progress", 
+        "percentage": int(percentage),
+        "message": message
+    }}
+    print(json.dumps(progress_data), flush=True)
+
+def install_requirements():
+    \"\"\"Install requirements.txt with progress reporting.\"\"\"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    requirements_file = os.path.join(script_dir, "requirements.txt")
+    
+    if not os.path.exists(requirements_file):
+        report_progress(100, "No requirements.txt found - installation complete")
+        return True
+    
+    # Read requirements to count packages
+    with open(requirements_file, 'r') as f:
+        requirements = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+    
+    total_packages = len(requirements)
+    if total_packages == 0:
+        report_progress(100, "No packages to install")
+        return True
+    
+    report_progress(0, f"Installing {{total_packages}} packages...")
+    
+    # Find pip executable
+    if sys.platform == "win32":
+        pip_exe = os.path.join(script_dir, "python", "Scripts", "pip.exe")
+        python_exe = os.path.join(script_dir, "python", "python.exe")
+    else:
+        pip_exe = os.path.join(script_dir, "python", "bin", "pip")
+        python_exe = os.path.join(script_dir, "python", "bin", "python")
+    
+    if not os.path.exists(pip_exe):
+        report_progress(100, "ERROR: pip not found")
+        return False
+    
+    # Install packages one by one for progress tracking
+    for i, package in enumerate(requirements):
+        if package.strip():
+            percentage = int((i / total_packages) * 90)  # Reserve 10% for cleanup
+            report_progress(percentage, f"Installing {{package}}...")
+            
+            try:
+                # Install with CUDA index for PyTorch packages
+                if any(torch_pkg in package.lower() for torch_pkg in ['torch', 'torchvision', 'torchaudio']):
+                    cmd = [pip_exe, "install", package, "--index-url", "https://download.pytorch.org/whl/cu124", "--no-cache-dir"]
+                else:
+                    cmd = [pip_exe, "install", package, "--no-cache-dir"]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+                
+                if result.returncode != 0:
+                    report_progress(percentage, f"Warning: Failed to install {{package}}")
+                    print(f"Error installing {{package}}: {{result.stderr}}", file=sys.stderr)
+            
+            except subprocess.TimeoutExpired:
+                report_progress(percentage, f"Warning: Timeout installing {{package}}")
+            except Exception as e:
+                report_progress(percentage, f"Warning: Error installing {{package}}: {{e}}")
+    
+    # Cleanup step
+    report_progress(95, "Cleaning up installation cache...")
+    try:
+        subprocess.run([pip_exe, "cache", "purge"], capture_output=True, timeout=30)
+    except:
+        pass
+    
+    report_progress(100, "Package installation complete!")
+    
+    # Create marker file to indicate bootstrap completed
+    marker_file = os.path.join(script_dir, ".bootstrap_complete")
+    with open(marker_file, 'w') as f:
+        f.write("Bootstrap installation completed\\n")
+    
+    return True
+
+if __name__ == "__main__":
+    success = install_requirements()
+    sys.exit(0 if success else 1)
+"""
+    
+    # Write bootstrap script
+    bootstrap_path = os.path.join(ANYMATIX_DIR, "bootstrap.py")
+    with open(bootstrap_path, 'w') as f:
+        f.write(bootstrap_script)
+    
+    print(f"Created bootstrap script: {bootstrap_path}")
+
+
 def create_portable_python() -> None:
     """Create a portable Python environment using Miniforge."""
     last_checkpoint = load_checkpoint()
@@ -264,12 +371,12 @@ def create_portable_python() -> None:
         return
 
     if platform.system() == "Windows":
-        # COMPACT VERSION: Use Python embeddable package instead of Miniforge (90% smaller!)
-        print("Creating COMPACT Windows Python environment...")
+        # MINIMAL BOOTSTRAP VERSION: Ultra-compact Python + bootstrap installer
+        print("Creating MINIMAL BOOTSTRAP Windows Python environment...")
         
-        # Download Python 3.13 embeddable package (~25MB vs 200MB+ Miniforge)
+        # Download Python 3.13 embeddable package (~25MB)
         python_url = "https://www.python.org/ftp/python/3.13.0/python-3.13.0-embed-amd64.zip"
-        print(f"Downloading Python 3.13 embeddable package (COMPACT - ~25MB)...")
+        print(f"Downloading Python 3.13 embeddable package (MINIMAL - ~25MB)...")
         urllib.request.urlretrieve(python_url, "python_embed.zip")
         
         # Extract to python directory
@@ -287,7 +394,7 @@ def create_portable_python() -> None:
         
         print("Added ComfyUI directory to Python path for embeddable package")
         
-        # Download and install pip
+        # Download and install pip only
         print("Installing pip...")
         get_pip_url = "https://bootstrap.pypa.io/get-pip.py"
         urllib.request.urlretrieve(get_pip_url, os.path.join(PYTHON_DIR, "get-pip.py"))
@@ -295,12 +402,16 @@ def create_portable_python() -> None:
         run_command([python_exe, os.path.join(PYTHON_DIR, "get-pip.py")], check=True)
         os.remove(os.path.join(PYTHON_DIR, "get-pip.py"))
         
-        # Install essential build tools for embeddable Python
+        # Install only essential build tools (needed for bootstrap)
         print("Installing essential build tools (setuptools, wheel)...")
         pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
         run_command([pip_exe, "install", "--upgrade", "setuptools", "wheel", "build"], check=True)
         
-        print("COMPACT Windows Python environment created successfully! (~90% size reduction)")
+        # Create bootstrap script that will install packages on first run
+        create_bootstrap_script()
+        
+        print("MINIMAL BOOTSTRAP Windows Python environment created successfully! (~95% size reduction)")
+        print("Packages will be installed on first run via bootstrap script")
         
     else:
         # Original Miniforge approach for macOS/Linux (for now)
@@ -323,13 +434,21 @@ def create_portable_python() -> None:
     # Save checkpoint after Python environment creation
     save_checkpoint("create_python")
 
-    # Install required packages
-    print("Installing required packages...")
-    
-    # Check if we should skip Python installation
-    if should_skip_step("install_python", last_checkpoint):
-        print("Skipping Python installation (already completed)")
+    # Install required packages (skip for Windows bootstrap mode)
+    if platform.system() == "Windows" and os.path.exists(os.path.join(ANYMATIX_DIR, "bootstrap.py")):
+        print("Skipping package installation for Windows bootstrap mode")
+        print("Packages will be installed on first run by bootstrap script")
+        # Skip to environment setup
+        save_checkpoint("install_pytorch")
+        save_checkpoint("install_requirements") 
+        save_checkpoint("install_python")
     else:
+        print("Installing required packages...")
+        
+        # Check if we should skip Python installation
+        if should_skip_step("install_python", last_checkpoint):
+            print("Skipping Python installation (already completed)")
+        else:
         # Platform-specific installation
         if platform.system() == "Windows":
             # Determine if we're using compact (embeddable) or conda environment
@@ -1153,6 +1272,51 @@ try {
     }
     
     Write-Host "All required files validated" -ForegroundColor Green
+    
+    # Bootstrap check - run first-time package installation if needed
+    $BootstrapScript = Join-Path $ScriptDir "bootstrap.py"
+    $BootstrapMarker = Join-Path $ScriptDir ".bootstrap_complete"
+    
+    if ((Test-Path $BootstrapScript -PathType Leaf) -and -not (Test-Path $BootstrapMarker -PathType Leaf)) {
+        Write-Host "=== FIRST RUN DETECTED - Installing Python packages ===" -ForegroundColor Yellow
+        Write-Host "This may take several minutes depending on your internet connection..." -ForegroundColor Yellow
+        
+        # Run bootstrap script and capture JSON progress output
+        $bootstrapProcess = Start-Process -FilePath $PythonExe -ArgumentList $BootstrapScript -WorkingDirectory $ScriptDir -NoNewWindow -PassThru -RedirectStandardOutput "bootstrap_output.log" -RedirectStandardError "bootstrap_error.log"
+        
+        # Monitor bootstrap process and show progress
+        while (-not $bootstrapProcess.HasExited) {
+            if (Test-Path "bootstrap_output.log") {
+                $output = Get-Content "bootstrap_output.log" -Tail 1 -ErrorAction SilentlyContinue
+                if ($output -and $output.StartsWith("{")) {
+                    try {
+                        $progress = $output | ConvertFrom-Json
+                        if ($progress.type -eq "progress") {
+                            Write-Host ("[{0}%] {1}" -f $progress.percentage, $progress.message) -ForegroundColor Cyan
+                        }
+                    } catch {
+                        # Ignore JSON parsing errors
+                    }
+                }
+            }
+            Start-Sleep -Seconds 2
+        }
+        
+        # Check bootstrap completion
+        if ($bootstrapProcess.ExitCode -eq 0 -and (Test-Path $BootstrapMarker -PathType Leaf)) {
+            Write-Host "=== Package installation completed successfully! ===" -ForegroundColor Green
+            # Clean up log files
+            Remove-Item "bootstrap_output.log" -ErrorAction SilentlyContinue
+            Remove-Item "bootstrap_error.log" -ErrorAction SilentlyContinue
+        } else {
+            Write-Host "=== Package installation failed! ===" -ForegroundColor Red
+            if (Test-Path "bootstrap_error.log") {
+                Write-Host "Error details:" -ForegroundColor Red
+                Get-Content "bootstrap_error.log" | Write-Host -ForegroundColor Red
+            }
+            throw "Bootstrap installation failed - cannot start ComfyUI"
+        }
+    }
     
     # Parent process detection for automatic termination
     $CurrentPID = [System.Diagnostics.Process]::GetCurrentProcess().Id
