@@ -532,6 +532,10 @@ def prune_environment() -> None:
         site_packages = os.path.join(PYTHON_DIR, "lib", "python3.13", "site-packages")
         conda_pkgs_dir = os.path.join(PYTHON_DIR, "pkgs")
 
+    # Verify packages BEFORE pruning
+    print("📋 Package verification BEFORE pruning...")
+    verify_critical_packages("pre-pruning")
+
     # 1) Clean conda caches
     try:
         if os.path.exists(conda_exe):
@@ -659,7 +663,40 @@ def prune_environment() -> None:
     print("Pruning complete.")
     
     # Verify critical packages are still importable after pruning
-    failed_packages = verify_critical_packages("pruning")
+    print("📋 Package verification AFTER pruning...")
+    failed_packages = verify_critical_packages("post-pruning")
+    
+    # Check site-packages directory integrity
+    print(f"📁 Checking site-packages directory: {site_packages}")
+    if os.path.exists(site_packages):
+        try:
+            pkg_count = len([d for d in os.listdir(site_packages) if os.path.isdir(os.path.join(site_packages, d))])
+            print(f"📦 Found {pkg_count} package directories in site-packages after pruning")
+            
+            # Check for specific critical packages
+            critical_dirs = ["yaml", "transformers", "scipy", "cv2", "matplotlib", "numpy", "PIL"]
+            missing_dirs = []
+            for pkg_dir in critical_dirs:
+                pkg_path = os.path.join(site_packages, pkg_dir)
+                if not os.path.exists(pkg_path):
+                    # Also check for egg-info or dist-info directories
+                    egg_pattern = f"{pkg_dir}*.egg-info"
+                    dist_pattern = f"{pkg_dir}*.dist-info"
+                    import glob
+                    egg_matches = glob.glob(os.path.join(site_packages, egg_pattern))
+                    dist_matches = glob.glob(os.path.join(site_packages, dist_pattern))
+                    if not egg_matches and not dist_matches:
+                        missing_dirs.append(pkg_dir)
+            
+            if missing_dirs:
+                print(f"❌ CRITICAL: Missing package directories after pruning: {missing_dirs}")
+            else:
+                print("✅ All critical package directories found after pruning")
+                
+        except Exception as e:
+            print(f"⚠️ Could not check site-packages integrity: {e}")
+    else:
+        print(f"❌ CRITICAL: site-packages directory missing after pruning: {site_packages}")
     
     # List packages after pruning to see what's left
     if system == "Windows":
