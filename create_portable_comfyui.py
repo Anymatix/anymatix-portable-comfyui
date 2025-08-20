@@ -108,7 +108,7 @@ def get_miniforge_url() -> str:
 
 def verify_critical_packages(context: str = "verification") -> None:
     """Verify that critical packages are importable."""
-    print(f"🔍 Verifying critical packages during {context}...")
+    print(f"[VERIFY] Verifying critical packages during {context}...")
     
     system = platform.system()
     if system == "Windows":
@@ -130,22 +130,22 @@ def verify_critical_packages(context: str = "verification") -> None:
     failed_packages = []
     for pkg_name, import_name in critical_packages.items():
         try:
-            result = run_command([python_exe, "-c", f"import {import_name}; print(f'✅ {import_name} OK')"], check=False, verbose=False)
+            result = run_command([python_exe, "-c", f"import {import_name}; print(f'[OK] {import_name} OK')"], check=False, verbose=False)
             if result.returncode != 0:
-                print(f"❌ FAILED: {import_name} (from {pkg_name}) - Return code: {result.returncode}")
+                print(f"[FAIL] FAILED: {import_name} (from {pkg_name}) - Return code: {result.returncode}")
                 if result.stderr:
                     print(f"   Error: {result.stderr[:200]}")
                 failed_packages.append(pkg_name)
             else:
-                print(f"✅ {import_name} OK")
+                print(f"[OK] {import_name} OK")
         except Exception as e:
-            print(f"⚠️ Exception verifying {import_name}: {e}")
+            print(f"[WARN] Exception verifying {import_name}: {e}")
             failed_packages.append(pkg_name)
     
     if failed_packages:
-        print(f"❌ CRITICAL: {len(failed_packages)} packages failed verification during {context}: {', '.join(failed_packages)}")
+        print(f"[CRITICAL] CRITICAL: {len(failed_packages)} packages failed verification during {context}: {', '.join(failed_packages)}")
     else:
-        print(f"✅ All critical packages verified successfully during {context}")
+        print(f"[SUCCESS] All critical packages verified successfully during {context}")
     
     return failed_packages
 
@@ -159,7 +159,7 @@ def run_command(
         verbose = hasattr(save_checkpoint, '_ci_mode') and save_checkpoint._ci_mode
     
     if verbose:
-        print(f"🔧 Running command: {' '.join(cmd)}")
+        print(f"[RUN] Running command: {' '.join(cmd)}")
     
     try:
         result = subprocess.run(
@@ -172,14 +172,14 @@ def run_command(
         )
         
         if verbose and result.stdout:
-            print(f"📤 stdout: {result.stdout[:2000]}{'...' if len(result.stdout) > 2000 else ''}")
+            print(f"[OUT] stdout: {result.stdout[:2000]}{'...' if len(result.stdout) > 2000 else ''}")
         if verbose and result.stderr:
-            print(f"📤 stderr: {result.stderr[:1000]}{'...' if len(result.stderr) > 1000 else ''}")
+            print(f"[ERR] stderr: {result.stderr[:1000]}{'...' if len(result.stderr) > 1000 else ''}")
             
         return result
         
     except subprocess.CalledProcessError as e:
-        print(f"❌ Command failed: {' '.join(cmd)}")
+        print(f"[FAIL] Command failed: {' '.join(cmd)}")
         print(f"Error: {e}")
         print(f"Output: {e.stdout if hasattr(e, 'stdout') else ''}")
         print(f"Error output: {e.stderr if hasattr(e, 'stderr') else ''}")
@@ -463,7 +463,7 @@ def create_portable_python() -> None:
                     verify_critical_packages("requirements installation")
                     
                     # List installed packages for debugging
-                    print("📋 Listing all installed packages after requirements installation...")
+                    print("[LIST] Listing all installed packages after requirements installation...")
                     run_command([pip_exe, "list"], check=False, verbose=True)
                 else:
                     print("No requirements to install after filtering")
@@ -533,7 +533,7 @@ def prune_environment() -> None:
         conda_pkgs_dir = os.path.join(PYTHON_DIR, "pkgs")
 
     # Verify packages BEFORE pruning
-    print("📋 Package verification BEFORE pruning...")
+    print("[VERIFY] Package verification BEFORE pruning...")
     verify_critical_packages("pre-pruning")
 
     # 1) Clean conda caches
@@ -663,15 +663,15 @@ def prune_environment() -> None:
     print("Pruning complete.")
     
     # Verify critical packages are still importable after pruning
-    print("📋 Package verification AFTER pruning...")
+    print("[VERIFY] Package verification AFTER pruning...")
     failed_packages = verify_critical_packages("post-pruning")
     
     # Check site-packages directory integrity
-    print(f"📁 Checking site-packages directory: {site_packages}")
+    print(f"[CHECK] Checking site-packages directory: {site_packages}")
     if os.path.exists(site_packages):
         try:
             pkg_count = len([d for d in os.listdir(site_packages) if os.path.isdir(os.path.join(site_packages, d))])
-            print(f"📦 Found {pkg_count} package directories in site-packages after pruning")
+            print(f"[INFO] Found {pkg_count} package directories in site-packages after pruning")
             
             # Check for specific critical packages
             critical_dirs = ["yaml", "transformers", "scipy", "cv2", "matplotlib", "numpy", "PIL"]
@@ -689,21 +689,21 @@ def prune_environment() -> None:
                         missing_dirs.append(pkg_dir)
             
             if missing_dirs:
-                print(f"❌ CRITICAL: Missing package directories after pruning: {missing_dirs}")
+                print(f"[CRITICAL] CRITICAL: Missing package directories after pruning: {missing_dirs}")
             else:
-                print("✅ All critical package directories found after pruning")
+                print("[SUCCESS] All critical package directories found after pruning")
                 
         except Exception as e:
-            print(f"⚠️ Could not check site-packages integrity: {e}")
+            print(f"[WARN] Could not check site-packages integrity: {e}")
     else:
-        print(f"❌ CRITICAL: site-packages directory missing after pruning: {site_packages}")
+        print(f"[CRITICAL] CRITICAL: site-packages directory missing after pruning: {site_packages}")
     
     # List packages after pruning to see what's left
     if system == "Windows":
         pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
     else:
         pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
-    print("📋 Listing packages after pruning...")
+    print("[LIST] Listing packages after pruning...")
     run_command([pip_exe, "list"], check=False, verbose=True)
 
 
@@ -1588,10 +1588,10 @@ def main() -> None:
         trigger_github_workflow(args.workflow, args.branch)
 
     # Final verification before completion
-    print("🔍 Final verification of critical packages...")
+    print("[VERIFY] Final verification of critical packages...")
     final_failed = verify_critical_packages("final build completion")
     if final_failed:
-        print(f"❌ WARNING: Build completed but {len(final_failed)} critical packages are missing!")
+        print(f"[WARNING] WARNING: Build completed but {len(final_failed)} critical packages are missing!")
         print("This may cause runtime failures. Check the logs above for details.")
 
     # Clear checkpoint on successful completion (only in local mode)
