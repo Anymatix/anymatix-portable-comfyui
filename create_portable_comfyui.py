@@ -106,12 +106,63 @@ def get_miniforge_url() -> str:
     raise ValueError(f"Unsupported platform: {system} {machine}")
 
 
+def verify_critical_packages(context: str = "verification") -> None:
+    """Verify that critical packages are importable."""
+    print(f"🔍 Verifying critical packages during {context}...")
+    
+    system = platform.system()
+    if system == "Windows":
+        python_exe = os.path.join(PYTHON_DIR, "python.exe")
+    else:
+        python_exe = os.path.join(PYTHON_DIR, "bin", "python")
+    
+    # Map of package name to import name
+    critical_packages = {
+        "pyyaml": "yaml", 
+        "transformers": "transformers",
+        "scipy": "scipy", 
+        "opencv-python": "cv2",
+        "matplotlib": "matplotlib",
+        "numpy": "numpy",
+        "PIL": "PIL"
+    }
+    
+    failed_packages = []
+    for pkg_name, import_name in critical_packages.items():
+        try:
+            result = run_command([python_exe, "-c", f"import {import_name}; print(f'✅ {import_name} OK')"], check=False, verbose=False)
+            if result.returncode != 0:
+                print(f"❌ FAILED: {import_name} (from {pkg_name}) - Return code: {result.returncode}")
+                if result.stderr:
+                    print(f"   Error: {result.stderr[:200]}")
+                failed_packages.append(pkg_name)
+            else:
+                print(f"✅ {import_name} OK")
+        except Exception as e:
+            print(f"⚠️ Exception verifying {import_name}: {e}")
+            failed_packages.append(pkg_name)
+    
+    if failed_packages:
+        print(f"❌ CRITICAL: {len(failed_packages)} packages failed verification during {context}: {', '.join(failed_packages)}")
+    else:
+        print(f"✅ All critical packages verified successfully during {context}")
+    
+    return failed_packages
+
+
 def run_command(
-    cmd: List[str], check: bool = True, shell: bool = False
+    cmd: List[str], check: bool = True, shell: bool = False, verbose: bool = None
 ) -> subprocess.CompletedProcess:
     """Run a command and handle errors."""
+    # Auto-enable verbose mode in CI
+    if verbose is None:
+        verbose = hasattr(save_checkpoint, '_ci_mode') and save_checkpoint._ci_mode
+    
+    if verbose:
+        print(f"🔧 Running command: {' '.join(cmd)}")
+    
     try:
-        return subprocess.run(
+        result = subprocess.run(
             cmd,
             check=check,
             shell=shell,
@@ -119,8 +170,16 @@ def run_command(
             stderr=subprocess.PIPE,
             text=True,
         )
+        
+        if verbose and result.stdout:
+            print(f"📤 stdout: {result.stdout[:2000]}{'...' if len(result.stdout) > 2000 else ''}")
+        if verbose and result.stderr:
+            print(f"📤 stderr: {result.stderr[:1000]}{'...' if len(result.stderr) > 1000 else ''}")
+            
+        return result
+        
     except subprocess.CalledProcessError as e:
-        print(f"Command failed: {' '.join(cmd)}")
+        print(f"❌ Command failed: {' '.join(cmd)}")
         print(f"Error: {e}")
         print(f"Output: {e.stdout if hasattr(e, 'stdout') else ''}")
         print(f"Error output: {e.stderr if hasattr(e, 'stderr') else ''}")
@@ -393,10 +452,19 @@ def create_portable_python() -> None:
                     print(f"Installing {len(filtered_requirements)} packages...")
                     if platform.system() == "Windows":
                         pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
+                        python_exe = os.path.join(PYTHON_DIR, "python.exe")
                     else:
                         pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
+                        python_exe = os.path.join(PYTHON_DIR, "bin", "python")
                     result = run_command([pip_exe, "install"] + filtered_requirements, check=True)
                     print("Requirements installation completed successfully")
+                    
+                    # Verify critical packages are importable after installation
+                    verify_critical_packages("requirements installation")
+                    
+                    # List installed packages for debugging
+                    print("📋 Listing all installed packages after requirements installation...")
+                    run_command([pip_exe, "list"], check=False, verbose=True)
                 else:
                     print("No requirements to install after filtering")
             except Exception as e:
@@ -589,6 +657,17 @@ def prune_environment() -> None:
                     except Exception:
                         pass
     print("Pruning complete.")
+    
+    # Verify critical packages are still importable after pruning
+    failed_packages = verify_critical_packages("pruning")
+    
+    # List packages after pruning to see what's left
+    if system == "Windows":
+        pip_exe = os.path.join(PYTHON_DIR, "Scripts", "pip.exe")
+    else:
+        pip_exe = os.path.join(PYTHON_DIR, "bin", "pip")
+    print("📋 Listing packages after pruning...")
+    run_command([pip_exe, "list"], check=False, verbose=True)
 
 
 def clone_comfyui() -> None:
@@ -1470,6 +1549,13 @@ def main() -> None:
     # Trigger GitHub workflow if requested
     if args.trigger_workflow:
         trigger_github_workflow(args.workflow, args.branch)
+
+    # Final verification before completion
+    print("🔍 Final verification of critical packages...")
+    final_failed = verify_critical_packages("final build completion")
+    if final_failed:
+        print(f"❌ WARNING: Build completed but {len(final_failed)} critical packages are missing!")
+        print("This may cause runtime failures. Check the logs above for details.")
 
     # Clear checkpoint on successful completion (only in local mode)
     if not args.ci and os.path.exists(CHECKPOINT_FILE):
