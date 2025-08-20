@@ -278,10 +278,14 @@ def create_portable_python() -> None:
             zip_ref.extractall(PYTHON_DIR)
         os.remove("python_embed.zip")
         
-        # Enable pip by modifying python313._pth
+        # Enable pip and add ComfyUI to Python path by modifying python313._pth
         pth_file = os.path.join(PYTHON_DIR, "python313._pth")
         with open(pth_file, 'a') as f:
             f.write("\nimport site\n")
+            # Add ComfyUI directory to Python path so 'import comfy' works
+            f.write("../ComfyUI\n")
+        
+        print("Added ComfyUI directory to Python path for embeddable package")
         
         # Download and install pip
         print("Installing pip...")
@@ -1415,19 +1419,19 @@ def create_zip_package() -> str:
     # Create zip filename with version and architecture
     zip_filename = f"anymatix-portable-comfyui-{system}-{arch}-v{version}.zip"
 
-    # Prefer external zip with maximum compression on all platforms; fallback to Python zipfile
+    # Prefer external zip with moderate compression on all platforms; fallback to Python zipfile
     try:
-        print("Attempting external zip -9 for maximum compression...")
-        run_command(["zip", "-9", "-r", zip_filename, ANYMATIX_DIR])
+        print("Attempting external zip -6 for balanced compression/speed...")
+        run_command(["zip", "-6", "-r", zip_filename, ANYMATIX_DIR])
         print(f"Zip package created successfully using external zip: {zip_filename}")
         return zip_filename
     except Exception as e:
         print(f"Warning: external zip failed: {e}")
-        print("Falling back to Python's zipfile with compresslevel=9")
+        print("Falling back to Python's zipfile with compresslevel=6")
 
     compression_method = zipfile.ZIP_DEFLATED
     # Python 3.13 supports compresslevel for ZIP_DEFLATED
-    with zipfile.ZipFile(zip_filename, "w", compression_method, compresslevel=9) as zipf:
+    with zipfile.ZipFile(zip_filename, "w", compression_method, compresslevel=6) as zipf:
         for root, _, files in os.walk(ANYMATIX_DIR):
             for file in files:
                 file_path = os.path.join(root, file)
@@ -1444,13 +1448,21 @@ def create_zip_package() -> str:
     return zip_filename
 
 
-def split_file(file_path: str, part_size_bytes: int = 512 * 1024 * 1024) -> List[str]:
+def split_file(file_path: str, part_size_bytes: int = 1024 * 1024 * 1024) -> List[str]:
     """Split a file into fixed-size parts. Returns the list of created part filenames.
 
     Parts are named: <file>.part01, <file>.part02, ...
     """
     parts: List[str] = []
     total_size = os.path.getsize(file_path)
+    
+    # Don't split if file is smaller than part_size_bytes or would only create one part
+    if total_size <= part_size_bytes:
+        print(f"File {os.path.basename(file_path)} ({total_size/1024/1024:.1f}MB) is small enough, not splitting")
+        return parts
+    
+    print(f"Splitting {os.path.basename(file_path)} ({total_size/1024/1024:.1f}MB) into 1GB parts...")
+    
     if total_size == 0:
         return parts
 
@@ -1466,6 +1478,8 @@ def split_file(file_path: str, part_size_bytes: int = 512 * 1024 * 1024) -> List
             parts.append(part_name)
             print(f"Created part {part_name} ({len(chunk)} bytes)")
             idx += 1
+    
+    print(f"Split into {len(parts)} parts")
     return parts
 
 
