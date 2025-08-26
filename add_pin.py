@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Add a (anymatix_version, comfyui_commit, custom_nodes) pin to PIN.json if not already present.
-- Reads version from ../../app/VERSION.txt
+- Reads version from ../../app/COMFYUI_VERSION.txt
 - Reads current commit hash from anymatix/ComfyUI (local clone)
 - Reads repos.json and gets commit hash for each custom node repo in anymatix/ComfyUI/custom_nodes
 - Adds to PIN.json only if not already present
@@ -11,7 +11,7 @@ import json
 import subprocess
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION_PATH = os.path.abspath(os.path.join(REPO_ROOT, '../../app/VERSION.txt'))
+APP_VERSION_PATH = os.path.abspath(os.path.join(REPO_ROOT, '../../app/COMFYUI_VERSION.txt'))
 COMFYUI_PATH = os.path.join(REPO_ROOT, 'anymatix', 'ComfyUI')
 CUSTOM_NODES_PATH = os.path.join(COMFYUI_PATH, 'custom_nodes')
 REPOS_JSON_PATH = os.path.join(REPO_ROOT, 'repos.json')
