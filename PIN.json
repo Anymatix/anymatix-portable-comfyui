@@ -5,7 +5,7 @@
         "custom_nodes": [
             {
                 "url": "https://github.com/Anymatix/anymatix-comfy-nodes.git",
-                "commit": "d086826b73be79d039cbdc001232543daf80d68b"
+                "commit": "4d41deda47d1c61ee4825d812f101aa8e87b5f7d"
             },
             {
                 "url": "https://github.com/alessandrozonta/ComfyUI-CLIPSeg.git",
@@ -14,6 +14,10 @@
             {
                 "url": "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git",
                 "commit": "8e4d79471bf1952154768e8435a9300077b534fa"
+            },
+            {
+                "url": "https://github.com/city96/ComfyUI-GGUF.git",
+                "commit": "d247022e3fa66851c5084cc251b076aab816423d"
             }
         ]
     }
