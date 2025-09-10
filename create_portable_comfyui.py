@@ -750,10 +750,10 @@ def clone_comfyui() -> None:
     if not comfyui_commit:
         raise RuntimeError(f"No comfyui_commit found in PIN.json for Anymatix version {anymatix_version}")
     
-    # Use shorter timeout for faster failure detection instead of shallow clone
-    # (shallow clone doesn't work well with pinned commits)
-    run_command(["git", "clone", COMFYUI_REPO, COMFYUI_DIR], timeout=180)
-    run_command(["git", "-C", COMFYUI_DIR, "checkout", comfyui_commit])
+    # Clone with blob filtering and reduced timeouts for better performance
+    print(f"Cloning ComfyUI repository to commit {comfyui_commit}...")
+    run_command(["git", "clone", "--filter=blob:none", "--no-checkout", COMFYUI_REPO, COMFYUI_DIR], timeout=90)
+    run_command(["git", "-C", COMFYUI_DIR, "checkout", comfyui_commit], timeout=30)
     print(f"ComfyUI repository cloned and checked out to {comfyui_commit}.")
     
     # Save checkpoint after ComfyUI cloning
@@ -794,18 +794,20 @@ def clone_custom_nodes() -> None:
         print(f"[DEBUG] Target directory: {repo_dir}")
         print(f"[DEBUG] Environment variables: HTTPS_PROXY={os.environ.get('HTTPS_PROXY', 'none')}, HTTP_PROXY={os.environ.get('HTTP_PROXY', 'none')}")
         
-        # Use shorter timeout for faster failure detection on problematic repos
-        run_command(["git", "clone", repo_url, repo_dir], timeout=180)
-        print(f"Clone completed for {repo_url} -> {repo_dir}")
-
-        # Checkout the pinned commit if available
+        # Get pinned commit first to determine clone strategy
         pin_commit = pin_commit_map.get(repo_url)
+        
         if pin_commit:
-            print(f"Checking out pinned commit {pin_commit} for {repo_url}")
-            run_command(["git", "-C", repo_dir, "checkout", pin_commit])
-            print(f"Checkout completed for {repo_url} at {pin_commit}")
+            # Optimize clone for pinned commit
+            print(f"Cloning {repo_url} to commit {pin_commit}...")
+            run_command(["git", "clone", "--filter=blob:none", "--no-checkout", repo_url, repo_dir], timeout=90)
+            run_command(["git", "-C", repo_dir, "checkout", pin_commit], timeout=30)
+            print(f"Clone and checkout completed for {repo_url} at {pin_commit}")
         else:
-            print(f"No pin found for {repo_url}, using default branch HEAD.")
+            # Regular clone for unpinned repos
+            print(f"Cloning {repo_url}...")
+            run_command(["git", "clone", "--filter=blob:none", repo_url, repo_dir], timeout=120)
+            print(f"Clone completed for {repo_url}, using default branch HEAD")
 
     print("Custom node repositories cloned and pinned successfully.")
     
