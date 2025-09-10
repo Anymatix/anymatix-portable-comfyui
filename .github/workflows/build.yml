@@ -34,6 +34,8 @@ jobs:
           path: |
             anymatix-portable-comfyui-darwin-*.zip.part*
             anymatix-portable-comfyui-darwin-*.zip
+            anymatix-portable-comfyui-darwin-*.tar.bz2.part*
+            anymatix-portable-comfyui-darwin-*.tar.bz2
           if-no-files-found: warn
 
   build-windows:
@@ -61,6 +63,8 @@ jobs:
           path: |
             anymatix-portable-comfyui-windows-*.zip.part*
             anymatix-portable-comfyui-windows-*.zip
+            anymatix-portable-comfyui-windows-*.tar.bz2.part*
+            anymatix-portable-comfyui-windows-*.tar.bz2
           if-no-files-found: warn
 
   # build-linux:

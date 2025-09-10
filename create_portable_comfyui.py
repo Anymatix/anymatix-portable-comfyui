@@ -1382,7 +1382,7 @@ finally {
 
 def create_zip_package() -> str:
     """Create a zip package of the portable ComfyUI."""
-    print("Creating zip package...")
+    print("Creating zip and tar.bz2 packages...")
 
     # Get version and platform info
     version = get_version()
@@ -1390,34 +1390,46 @@ def create_zip_package() -> str:
 
     # Create zip filename with version and architecture
     zip_filename = f"anymatix-portable-comfyui-{system}-{arch}-v{version}.zip"
+    tarbz2_filename = f"anymatix-portable-comfyui-{system}-{arch}-v{version}.tar.bz2"
 
     # Prefer external zip with maximum compression on all platforms; fallback to Python zipfile
     try:
         print("Attempting external zip -9 for maximum compression...")
         run_command(["zip", "-9", "-r", zip_filename, ANYMATIX_DIR])
         print(f"Zip package created successfully using external zip: {zip_filename}")
-        return zip_filename
     except Exception as e:
         print(f"Warning: external zip failed: {e}")
         print("Falling back to Python's zipfile with compresslevel=9")
+        compression_method = zipfile.ZIP_DEFLATED
+        # Python 3.13 supports compresslevel for ZIP_DEFLATED
+        with zipfile.ZipFile(zip_filename, "w", compression_method, compresslevel=9) as zipf:
+            for root, _, files in os.walk(ANYMATIX_DIR):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, os.path.dirname(ANYMATIX_DIR))
+                    try:
+                        if os.path.exists(file_path):
+                            zipf.write(file_path, arcname)
+                        else:
+                            print(f"Warning: File not found, skipping: {file_path}")
+                    except Exception as e:
+                        print(f"Warning: Error adding file to zip: {file_path}, Error: {e}")
+        print(f"Zip package created successfully: {zip_filename}")
 
-    compression_method = zipfile.ZIP_DEFLATED
-    # Python 3.13 supports compresslevel for ZIP_DEFLATED
-    with zipfile.ZipFile(zip_filename, "w", compression_method, compresslevel=9) as zipf:
-        for root, _, files in os.walk(ANYMATIX_DIR):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, os.path.dirname(ANYMATIX_DIR))
-                try:
-                    if os.path.exists(file_path):
-                        zipf.write(file_path, arcname)
-                    else:
-                        print(f"Warning: File not found, skipping: {file_path}")
-                except Exception as e:
-                    print(f"Warning: Error adding file to zip: {file_path}, Error: {e}")
+    # Create tar.bz2 using external tar if available, fallback to Python tarfile
+    try:
+        print("Attempting external tar.bz2 for maximum compression...")
+        run_command(["tar", "cjf", tarbz2_filename, ANYMATIX_DIR])
+        print(f"tar.bz2 package created successfully using external tar: {tarbz2_filename}")
+    except Exception as e:
+        print(f"Warning: external tar.bz2 failed: {e}")
+        print("Falling back to Python's tarfile with bzip2 compression")
+        import tarfile
+        with tarfile.open(tarbz2_filename, "w:bz2") as tarf:
+            tarf.add(ANYMATIX_DIR, arcname=os.path.basename(ANYMATIX_DIR))
+        print(f"tar.bz2 package created successfully: {tarbz2_filename}")
 
-    print(f"Zip package created successfully: {zip_filename}")
-    return zip_filename
+    return zip_filename, tarbz2_filename
 
 
 def split_file(file_path: str, part_size_bytes: int = 100 * 1024 * 1024) -> List[str]:
@@ -1568,35 +1580,37 @@ def main() -> None:
         save_checkpoint("copy_requirements")
 
     # Create zip package
-    zip_filename = None
+    zip_filename, tarbz2_filename = None, None
     if should_skip_step("create_zip", last_checkpoint):
-        print("Skipping zip creation (already completed)")
-        # Try to find existing zip file for CI processing
+        print("Skipping zip/tar.bz2 creation (already completed)")
         import glob
         zip_files = glob.glob("anymatix-*.zip")
+        tarbz2_files = glob.glob("anymatix-*.tar.bz2")
         if zip_files:
-            zip_filename = zip_files[0]  # Use the first found zip file
+            zip_filename = zip_files[0]
             print(f"Found existing zip file: {zip_filename}")
+        if tarbz2_files:
+            tarbz2_filename = tarbz2_files[0]
+            print(f"Found existing tar.bz2 file: {tarbz2_filename}")
     else:
-        zip_filename = create_zip_package()
+        zip_filename, tarbz2_filename = create_zip_package()
         save_checkpoint("create_zip")
 
-    # If we're on CI, rename the zip file to a standard name for the artifact
-    if args.ci and zip_filename and os.path.exists(zip_filename):
-            # Split zip into 100MB parts to bypass platform limits
-            print("Splitting zip into 100MB parts for CI uploads...")
-            parts = split_file(zip_filename, 100 * 1024 * 1024)
+    # If we're on CI, split both zip and tar.bz2 into 100MB parts for CI uploads
+    for filename in [zip_filename, tarbz2_filename]:
+        if args.ci and filename and os.path.exists(filename):
+            print(f"Splitting {filename} into 100MB parts for CI uploads...")
+            parts = split_file(filename, 100 * 1024 * 1024)
             if parts:
-                # Remove the original large zip to avoid double uploads
                 try:
-                    os.remove(zip_filename)
+                    os.remove(filename)
                 except Exception as e:
-                    print(f"Warning: failed to remove original zip {zip_filename}: {e}")
+                    print(f"Warning: failed to remove original archive {filename}: {e}")
                 print("Created parts:")
                 for p in parts:
                     print(f" - {p}")
             else:
-                print("Zip smaller than 100MB; no splitting performed.")
+                print(f"Archive {filename} smaller than 100MB; no splitting performed.")
 
     # Push to GitHub if requested
     if args.push:
