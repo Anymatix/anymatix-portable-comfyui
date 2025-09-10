@@ -182,8 +182,9 @@ def run_command(
     except subprocess.TimeoutExpired as e:
         print(f"[TIMEOUT] Command timed out after {timeout}s: {' '.join(cmd)}")
         if check:
-            raise Exception(f"Command timed out: {' '.join(cmd)}")
-        return e
+            raise
+        # Return a dummy CompletedProcess for non-check mode
+        return subprocess.CompletedProcess(cmd, 1, "", str(e))
     except subprocess.CalledProcessError as e:
         print(f"[FAIL] Command failed: {' '.join(cmd)}")
         print(f"Error: {e}")
@@ -191,7 +192,8 @@ def run_command(
         print(f"Error output: {e.stderr if hasattr(e, 'stderr') else ''}")
         if check:
             raise
-        return e
+        # Return the CompletedProcess from the exception (it has the same fields)
+        return subprocess.CompletedProcess(cmd, e.returncode, e.stdout or "", e.stderr or "")
 
 
 # Resume functionality
