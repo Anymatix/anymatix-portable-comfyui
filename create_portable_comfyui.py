@@ -785,30 +785,18 @@ def clone_custom_nodes() -> None:
         repo_dir = os.path.join(CUSTOM_NODES_DIR, repo_name)
 
         print(f"Cloning {repo_url}...")
-        # Use shallow clone with timeout for faster, more reliable cloning
-        try:
-            run_command(["git", "clone", "--depth", "1", "--single-branch", repo_url, repo_dir], timeout=300)
-            print(f"Clone completed for {repo_url} -> {repo_dir}")
-        except Exception as e:
-            print(f"Shallow clone failed for {repo_url}, trying full clone: {e}")
-            # Fallback to full clone if shallow fails
-            run_command(["git", "clone", repo_url, repo_dir], timeout=600)
-            print(f"Full clone completed for {repo_url} -> {repo_dir}")
+        print(f"[DEBUG] Current working directory: {os.getcwd()}")
+        print(f"[DEBUG] Target directory: {repo_dir}")
+        print(f"[DEBUG] Environment variables: HTTPS_PROXY={os.environ.get('HTTPS_PROXY', 'none')}, HTTP_PROXY={os.environ.get('HTTP_PROXY', 'none')}")
+        run_command(["git", "clone", repo_url, repo_dir], timeout=300)
+        print(f"Clone completed for {repo_url} -> {repo_dir}")
 
         # Checkout the pinned commit if available
         pin_commit = pin_commit_map.get(repo_url)
         if pin_commit:
             print(f"Checking out pinned commit {pin_commit} for {repo_url}")
-            # If we used shallow clone, we need to fetch the specific commit first
-            try:
-                run_command(["git", "-C", repo_dir, "checkout", pin_commit])
-                print(f"Checkout completed for {repo_url} at {pin_commit}")
-            except Exception as e:
-                print(f"Shallow checkout failed, fetching full history: {e}")
-                # Unshallow the repo and try again
-                run_command(["git", "-C", repo_dir, "fetch", "--unshallow"])
-                run_command(["git", "-C", repo_dir, "checkout", pin_commit])
-                print(f"Checkout completed after unshallow for {repo_url} at {pin_commit}")
+            run_command(["git", "-C", repo_dir, "checkout", pin_commit])
+            print(f"Checkout completed for {repo_url} at {pin_commit}")
         else:
             print(f"No pin found for {repo_url}, using default branch HEAD.")
 
