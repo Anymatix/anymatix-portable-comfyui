@@ -750,22 +750,11 @@ def clone_comfyui() -> None:
     if not comfyui_commit:
         raise RuntimeError(f"No comfyui_commit found in PIN.json for Anymatix version {anymatix_version}")
     
-    # Use shallow clone for faster performance, especially on Windows
-    try:
-        print("Attempting shallow clone of ComfyUI (faster)...")
-        run_command(["git", "clone", "--depth", "1", "--single-branch", COMFYUI_REPO, COMFYUI_DIR], timeout=120)
-        print("Shallow clone completed, attempting checkout...")
-        run_command(["git", "-C", COMFYUI_DIR, "checkout", comfyui_commit])
-        print(f"ComfyUI repository cloned and checked out to {comfyui_commit}.")
-    except Exception as e:
-        print(f"Shallow clone/checkout failed: {e}")
-        print("Falling back to full clone...")
-        # Clean up partial clone
-        if os.path.exists(COMFYUI_DIR):
-            shutil.rmtree(COMFYUI_DIR)
-        run_command(["git", "clone", COMFYUI_REPO, COMFYUI_DIR], timeout=180)
-        run_command(["git", "-C", COMFYUI_DIR, "checkout", comfyui_commit])
-        print(f"ComfyUI repository cloned and checked out to {comfyui_commit}.")
+    # Use shorter timeout for faster failure detection instead of shallow clone
+    # (shallow clone doesn't work well with pinned commits)
+    run_command(["git", "clone", COMFYUI_REPO, COMFYUI_DIR], timeout=180)
+    run_command(["git", "-C", COMFYUI_DIR, "checkout", comfyui_commit])
+    print(f"ComfyUI repository cloned and checked out to {comfyui_commit}.")
     
     # Save checkpoint after ComfyUI cloning
     save_checkpoint("clone_comfyui")
@@ -805,40 +794,16 @@ def clone_custom_nodes() -> None:
         print(f"[DEBUG] Target directory: {repo_dir}")
         print(f"[DEBUG] Environment variables: HTTPS_PROXY={os.environ.get('HTTPS_PROXY', 'none')}, HTTP_PROXY={os.environ.get('HTTP_PROXY', 'none')}")
         
-        # Try shallow clone first (much faster), fallback to full clone if needed
-        clone_success = False
-        try:
-            print(f"Attempting shallow clone of {repo_url} (faster)...")
-            run_command(["git", "clone", "--depth", "1", "--single-branch", repo_url, repo_dir], timeout=120)
-            clone_success = True
-            print(f"Shallow clone completed for {repo_url} -> {repo_dir}")
-        except Exception as e:
-            print(f"Shallow clone failed for {repo_url}: {e}")
-            print(f"Attempting full clone with shorter timeout...")
-            try:
-                run_command(["git", "clone", repo_url, repo_dir], timeout=180)
-                clone_success = True
-                print(f"Full clone completed for {repo_url} -> {repo_dir}")
-            except Exception as e2:
-                print(f"Full clone also failed for {repo_url}: {e2}")
-                raise Exception(f"Both shallow and full clone failed for {repo_url}")
-        
-        if not clone_success:
-            raise Exception(f"Failed to clone {repo_url}")
+        # Use shorter timeout for faster failure detection on problematic repos
+        run_command(["git", "clone", repo_url, repo_dir], timeout=180)
+        print(f"Clone completed for {repo_url} -> {repo_dir}")
 
         # Checkout the pinned commit if available
         pin_commit = pin_commit_map.get(repo_url)
         if pin_commit:
             print(f"Checking out pinned commit {pin_commit} for {repo_url}")
-            try:
-                run_command(["git", "-C", repo_dir, "checkout", pin_commit])
-                print(f"Checkout completed for {repo_url} at {pin_commit}")
-            except Exception as e:
-                print(f"Shallow checkout failed, fetching full history: {e}")
-                # If shallow clone can't checkout the specific commit, fetch more history
-                run_command(["git", "-C", repo_dir, "fetch", "--unshallow"], timeout=120)
-                run_command(["git", "-C", repo_dir, "checkout", pin_commit])
-                print(f"Checkout completed after unshallow for {repo_url} at {pin_commit}")
+            run_command(["git", "-C", repo_dir, "checkout", pin_commit])
+            print(f"Checkout completed for {repo_url} at {pin_commit}")
         else:
             print(f"No pin found for {repo_url}, using default branch HEAD.")
 
