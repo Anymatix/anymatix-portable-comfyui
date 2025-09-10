@@ -151,7 +151,7 @@ def verify_critical_packages(context: str = "verification") -> None:
 
 
 def run_command(
-    cmd: List[str], check: bool = True, shell: bool = False, verbose: bool = None
+    cmd: List[str], check: bool = True, shell: bool = False, verbose: bool = None, timeout: int = 600
 ) -> subprocess.CompletedProcess:
     """Run a command and handle errors."""
     # Auto-enable verbose mode in CI
@@ -169,6 +169,7 @@ def run_command(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            timeout=timeout,
         )
         
         if verbose and result.stdout:
@@ -178,6 +179,11 @@ def run_command(
             
         return result
         
+    except subprocess.TimeoutExpired as e:
+        print(f"[TIMEOUT] Command timed out after {timeout}s: {' '.join(cmd)}")
+        if check:
+            raise Exception(f"Command timed out: {' '.join(cmd)}")
+        return e
     except subprocess.CalledProcessError as e:
         print(f"[FAIL] Command failed: {' '.join(cmd)}")
         print(f"Error: {e}")
@@ -779,13 +785,30 @@ def clone_custom_nodes() -> None:
         repo_dir = os.path.join(CUSTOM_NODES_DIR, repo_name)
 
         print(f"Cloning {repo_url}...")
-        run_command(["git", "clone", repo_url, repo_dir])
+        # Use shallow clone with timeout for faster, more reliable cloning
+        try:
+            run_command(["git", "clone", "--depth", "1", "--single-branch", repo_url, repo_dir], timeout=300)
+            print(f"Clone completed for {repo_url} -> {repo_dir}")
+        except Exception as e:
+            print(f"Shallow clone failed for {repo_url}, trying full clone: {e}")
+            # Fallback to full clone if shallow fails
+            run_command(["git", "clone", repo_url, repo_dir], timeout=600)
+            print(f"Full clone completed for {repo_url} -> {repo_dir}")
 
         # Checkout the pinned commit if available
         pin_commit = pin_commit_map.get(repo_url)
         if pin_commit:
             print(f"Checking out pinned commit {pin_commit} for {repo_url}")
-            run_command(["git", "-C", repo_dir, "checkout", pin_commit])
+            # If we used shallow clone, we need to fetch the specific commit first
+            try:
+                run_command(["git", "-C", repo_dir, "checkout", pin_commit])
+                print(f"Checkout completed for {repo_url} at {pin_commit}")
+            except Exception as e:
+                print(f"Shallow checkout failed, fetching full history: {e}")
+                # Unshallow the repo and try again
+                run_command(["git", "-C", repo_dir, "fetch", "--unshallow"])
+                run_command(["git", "-C", repo_dir, "checkout", pin_commit])
+                print(f"Checkout completed after unshallow for {repo_url} at {pin_commit}")
         else:
             print(f"No pin found for {repo_url}, using default branch HEAD.")
 
