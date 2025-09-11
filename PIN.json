@@ -1,7 +1,7 @@
 [
     {
     "anymatix_version": "1.0.3",
-        "comfyui_commit": "88aee596a30e9b80ca831c42a0ae70e0d22b61ae",
+        "comfyui_commit": "e01e99d075852b94e93f27ea64ab862a49a7d2cc",
         "custom_nodes": [
             {
                 "url": "https://github.com/Anymatix/anymatix-comfy-nodes.git",
