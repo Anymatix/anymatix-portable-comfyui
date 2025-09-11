@@ -247,8 +247,8 @@ def should_skip_step(current_step: str, last_completed: Optional[str]) -> bool:
         "install_pytorch", 
         "install_requirements",
         "prune_environment",
-        "clone_comfyui",
-        "clone_custom_nodes",
+        # "clone_comfyui",        # COMMENTED OUT: Repository will be checked out later by the app
+        # "clone_custom_nodes",   # COMMENTED OUT: Repository will be checked out later by the app
         "create_launch_script"
     ]
     
@@ -1095,16 +1095,18 @@ def main() -> None:
         save_checkpoint("prune_environment")
 
     # Clone ComfyUI repository
-    if should_skip_step("clone_comfyui", last_checkpoint):
-        print("Skipping ComfyUI cloning (already completed)")
-    else:
-        clone_comfyui()
+    # COMMENTED OUT: Repository will be checked out later by the app
+    # if should_skip_step("clone_comfyui", last_checkpoint):
+    #     print("Skipping ComfyUI cloning (already completed)")
+    # else:
+    #     clone_comfyui()
 
     # Clone custom node repositories
-    if should_skip_step("clone_custom_nodes", last_checkpoint):
-        print("Skipping custom nodes cloning (already completed)")
-    else:
-        clone_custom_nodes()
+    # COMMENTED OUT: Repository will be checked out later by the app
+    # if should_skip_step("clone_custom_nodes", last_checkpoint):
+    #     print("Skipping custom nodes cloning (already completed)")
+    # else:
+    #     clone_custom_nodes()
 
     # Create launch script
     if should_skip_step("create_launch_script", last_checkpoint):

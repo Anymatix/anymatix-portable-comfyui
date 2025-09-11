@@ -1,6 +1,6 @@
 [
     {
-    "anymatix_version": "1.0.2",
+    "anymatix_version": "1.0.3",
         "comfyui_commit": "88aee596a30e9b80ca831c42a0ae70e0d22b61ae",
         "custom_nodes": [
             {
