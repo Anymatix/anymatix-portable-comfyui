@@ -958,17 +958,23 @@ def create_zip_package() -> str:
         print(f"Zip package created successfully: {zip_filename}")
 
     # Create tar.bz2 using external tar if available, fallback to Python tarfile
-    try:
-        print("Attempting external tar.bz2 for maximum compression...")
-        run_command(["tar", "cjf", tarbz2_filename, ANYMATIX_DIR])
-        print(f"tar.bz2 package created successfully using external tar: {tarbz2_filename}")
-    except Exception as e:
-        print(f"Warning: external tar.bz2 failed: {e}")
-        print("Falling back to Python's tarfile with bzip2 compression")
-        import tarfile
-        with tarfile.open(tarbz2_filename, "w:bz2") as tarf:
-            tarf.add(ANYMATIX_DIR, arcname=os.path.basename(ANYMATIX_DIR))
-        print(f"tar.bz2 package created successfully: {tarbz2_filename}")
+    # .tar.bz2 is not easy to extract even if it would be faster, skipping for now
+    if False:
+        try:
+            print("Attempting external tar.bz2 for maximum compression...")
+            run_command(["tar", "cjf", tarbz2_filename, ANYMATIX_DIR])
+            print(f"tar.bz2 package created successfully using external tar: {tarbz2_filename}")
+        except Exception as e:
+            print(f"Warning: external tar.bz2 failed: {e}")
+            print("Falling back to Python's tarfile with bzip2 compression")
+            import tarfile
+            with tarfile.open(tarbz2_filename, "w:bz2") as tarf:
+                tarf.add(ANYMATIX_DIR, arcname=os.path.basename(ANYMATIX_DIR))
+            print(f"tar.bz2 package created successfully: {tarbz2_filename}")
+    else:
+        # Explicitly skip tar.bz2 for now
+        print("Skipping tar.bz2 package creation")
+        tarbz2_filename = None
 
     return zip_filename, tarbz2_filename
 
@@ -1140,7 +1146,9 @@ def main() -> None:
         save_checkpoint("create_zip")
 
     # If we're on CI, split both zip and tar.bz2 into 100MB parts for CI uploads
-    for filename in [zip_filename, tarbz2_filename]:
+    #for filename in [zip_filename, tarbz2_filename]:
+    # Only split zip for now, tar.bz2 is skipped 
+    for filename in [zip_filename]:
         if args.ci and filename and os.path.exists(filename):
             print(f"Splitting {filename} into 100MB parts for CI uploads...")
             parts = split_file(filename, 100 * 1024 * 1024)
