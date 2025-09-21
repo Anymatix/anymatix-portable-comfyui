@@ -24,4 +24,3 @@ pygit2
 matplotlib
 av
 opencv-python-headless
-dulwich
