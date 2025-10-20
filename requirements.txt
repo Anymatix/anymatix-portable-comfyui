@@ -24,6 +24,7 @@ pygit2
 pytorch-lightning
 pyyaml
 safetensors>=0.4.2
+scikit-image
 scipy
 sentencepiece
 soundfile
