@@ -5,7 +5,7 @@
         "custom_nodes": [
             {
                 "url": "https://github.com/Anymatix/anymatix-comfy-nodes.git",
-                "commit": "3bf6ab85a0d702571a81f618e6a6353863ef5738"
+                "commit": "485dfdbc470bf7c98c7fa883cb4c2c01c06e12d9"
             },
             {
                 "url": "https://github.com/alessandrozonta/ComfyUI-CLIPSeg.git",
