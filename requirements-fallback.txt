@@ -22,5 +22,5 @@ spandrel
 soundfile
 pygit2
 matplotlib
-av
+av==16.0.1
 opencv-python-headless
