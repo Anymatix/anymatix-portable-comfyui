@@ -30,6 +30,10 @@
             {
                 "url": "https://github.com/kijai/ComfyUI-KJNodes.git",
                 "commit": "00da1910634fbf314d407608efb281ae6f7f1ba2"
+            },
+            {
+                "url": "https://github.com/wildminder/ComfyUI-Chatterbox.git",
+                "commit": "f0300cf84ee1b8fc9cbd38cb68cb3bace1895063"
             }
         ]
     }
