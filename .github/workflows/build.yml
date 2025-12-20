@@ -107,7 +107,17 @@ jobs:
       - name: Get version
         id: get-version
         run: |
-          VERSION=$(jq -r 'map(.anymatix_version) | max' PIN.json)
+          # v2.0+: Read from VERSION.txt first, fall back to PIN.json
+          if [ -f VERSION.txt ]; then
+            VERSION=$(cat VERSION.txt | tr -d '[:space:]')
+            echo "Read version from VERSION.txt: $VERSION"
+          elif [ -f PIN.json ]; then
+            VERSION=$(jq -r 'map(.anymatix_version) | max' PIN.json)
+            echo "Read version from PIN.json: $VERSION"
+          else
+            echo "ERROR: Neither VERSION.txt nor PIN.json found"
+            exit 1
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Clean existing assets for this tag (idempotent)

@@ -53,16 +53,24 @@ def parse_args() -> argparse.Namespace:
 
 
 def get_version() -> str:
-    """Get the latest anymatix_version from PIN.json (lexicographically highest)."""
-    if not os.path.exists("PIN.json"):
-        raise RuntimeError("PIN.json not found; cannot determine version.")
-    with open("PIN.json", "r") as f:
-        pins = json.load(f)
-    # Find the lexicographically highest version
-    versions = [pin.get("anymatix_version", "") for pin in pins if pin.get("anymatix_version")]
-    if not versions:
-        raise RuntimeError("No anymatix_version found in PIN.json.")
-    return sorted(versions)[-1]
+    """Get version from VERSION.txt (v2.0+) or fall back to PIN.json for backward compat."""
+    # v2.0+: Version is stored in VERSION.txt
+    if os.path.exists("VERSION.txt"):
+        with open("VERSION.txt", "r") as f:
+            version = f.read().strip()
+            if version:
+                return version
+    
+    # Backward compatibility: fall back to PIN.json (v1.x format)
+    if os.path.exists("PIN.json"):
+        with open("PIN.json", "r") as f:
+            pins = json.load(f)
+        # Find the lexicographically highest version
+        versions = [pin.get("anymatix_version", "") for pin in pins if pin.get("anymatix_version")]
+        if versions:
+            return sorted(versions)[-1]
+    
+    raise RuntimeError("Neither VERSION.txt nor PIN.json with version found.")
 
 
 def get_platform_info() -> tuple[str, str]:
@@ -735,26 +743,36 @@ def prune_environment() -> None:
 
 
 def clone_comfyui() -> None:
-    """Clone the ComfyUI repository."""
-    print("Cloning ComfyUI repository...")
-    # Get current Anymatix version
-    anymatix_version = get_version()
-    # Load PIN.json and find the matching comfyui_commit
-    with open("PIN.json", "r") as pf:
-        pins = json.load(pf)
-    comfyui_commit = None
-    for pin in pins:
-        if pin.get("anymatix_version", "").strip() == anymatix_version:
-            comfyui_commit = pin.get("comfyui_commit")
-            break
-    if not comfyui_commit:
-        raise RuntimeError(f"No comfyui_commit found in PIN.json for Anymatix version {anymatix_version}")
+    """Clone the ComfyUI repository.
     
-    # Clone with blob filtering and reduced timeouts for better performance
-    print(f"Cloning ComfyUI repository to commit {comfyui_commit}...")
-    run_command(["git", "clone", "--filter=blob:none", "--no-checkout", COMFYUI_REPO, COMFYUI_DIR], timeout=90)
-    run_command(["git", "-C", COMFYUI_DIR, "checkout", comfyui_commit], timeout=30)
-    print(f"ComfyUI repository cloned and checked out to {comfyui_commit}.")
+    v2.0+: ComfyUI commit is managed by the app's PIN.json and passed to bootstrap.py.
+    For standalone builds, reads from local PIN.json if available, else clones HEAD.
+    """
+    print("Cloning ComfyUI repository...")
+    anymatix_version = get_version()
+    comfyui_commit = None
+    
+    # Try to read commit from PIN.json (for standalone builds or v1.x compat)
+    if os.path.exists("PIN.json"):
+        with open("PIN.json", "r") as pf:
+            pins = json.load(pf)
+        for pin in pins:
+            if pin.get("anymatix_version", "").strip() == anymatix_version:
+                comfyui_commit = pin.get("comfyui_commit")
+                break
+    
+    if comfyui_commit:
+        # Clone with blob filtering and reduced timeouts for better performance
+        print(f"Cloning ComfyUI repository to commit {comfyui_commit}...")
+        run_command(["git", "clone", "--filter=blob:none", "--no-checkout", COMFYUI_REPO, COMFYUI_DIR], timeout=90)
+        run_command(["git", "-C", COMFYUI_DIR, "checkout", comfyui_commit], timeout=30)
+        print(f"ComfyUI repository cloned and checked out to {comfyui_commit}.")
+    else:
+        # v2.0+: No PIN.json or no matching version - clone HEAD
+        # The app's bootstrap.py will checkout the correct commit at runtime
+        print("No comfyui_commit in PIN.json - cloning HEAD (will be pinned by app at runtime)")
+        run_command(["git", "clone", "--filter=blob:none", "--depth=1", COMFYUI_REPO, COMFYUI_DIR], timeout=90)
+        print("ComfyUI repository cloned at HEAD.")
     
     # Save checkpoint after ComfyUI cloning
     save_checkpoint("clone_comfyui")

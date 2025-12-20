@@ -91,6 +91,29 @@ Semantic guidelines:
 - MINOR: new included nodes / features
 - PATCH: fixes, dependency pin adjustments, minor script improvements
 
+## Version 2.0 Changes
+
+Version 2.0 introduces a simplified architecture:
+
+### Configuration
+- **VERSION.txt**: Simple text file containing the version (e.g., `2.0.0`)
+- **PIN.json**: Now optional - the Anymatix app manages commit pinning via its own PIN.json
+- Version is read from `VERSION.txt` first, falling back to `PIN.json` for backward compatibility
+
+### Requirements
+- **requirements.txt**: Minimal bootstrap packages only (pygit2, yaml, aiohttp, etc.)
+- ComfyUI and custom node requirements are installed at runtime by `bootstrap.py`
+- GPU-specific PyTorch installation handled by bootstrap based on detected hardware
+
+### Bootstrap Flow
+1. App downloads the portable base system zip
+2. App uploads `bootstrap.py` and `PIN.json` (app's version) to target directory
+3. `bootstrap.py` reads `PIN.json` for commit pins and installs requirements
+4. ComfyUI is cloned/updated to the pinned commit
+5. Custom nodes are cloned/updated to their pinned commits
+
+This allows the app to control exact versions while the portable bundle provides only the Python environment.
+
 ## CI Overview
 GitHub Actions workflow (`.github/workflows/build.yml`) builds macOS & Windows zips then creates a release tagged `v<VERSION>` (version read from `VERSION.txt`). Linux job is present but commented out.
 

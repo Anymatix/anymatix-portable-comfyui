@@ -1,42 +1,19 @@
-aiofiles>=0.8.0        # Async file I/O for non-blocking operations
-aiohttp>=3.11.8
-alembic
-av==16.0.1
-comfyui-embedded-docs==0.2.6
-comfyui-frontend-package==1.27.10
-comfyui-workflow-templates==0.1.95
-einops
-gguf>=0.13.0
-imageio-ffmpeg>=0.4.7    # Automatic FFmpeg management (downloads FFmpeg automatically)
-kornia>=0.7.1
-matplotlib
-matplotlib-inline
-numpy>=1.25.0
-open-clip-torch
-opencv-python>=4.5.0    # For faster image processing (fallback to PIL if not available)
-opencv-python-headless
-Pillow
-protobuf
-psutil
-pydantic~=2.0
-pydantic-settings~=2.0
+# Anymatix Portable ComfyUI - Base Requirements v2.0
+# 
+# Minimal packages needed for bootstrap.py to work.
+# ComfyUI and custom node requirements are installed at runtime via pip.
+#
+# The app's bootstrap.py handles:
+# - ComfyUI requirements.txt installation
+# - Custom node requirements.txt installation
+# - GPU-specific PyTorch installation (CUDA/ROCm/MPS)
+
+# Git operations for bootstrap.py
 pygit2
-pytorch-lightning
+
+# Common utilities that benefit from being pre-installed
 pyyaml
-safetensors>=0.4.2
-scikit-image
-scipy
-sentencepiece
-soundfile
-spandrel
-SQLAlchemy
-tokenizers>=0.13.3
-torch
-torchaudio
-torchdiffeq
-torchmetrics
-torchsde
-torchvision
+aiofiles>=0.8.0
+aiohttp>=3.11.8
+psutil
 tqdm
-transformers>=4.37.2
-yarl>=1.18.0
