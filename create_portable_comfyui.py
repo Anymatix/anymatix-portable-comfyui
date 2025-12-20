@@ -341,19 +341,8 @@ def create_portable_python() -> None:
                 print("This is a critical error - cannot continue without Python")
                 raise
 
-            # Install PyTorch with CUDA support for Windows
-            print("Installing PyTorch with CUDA support for Windows...")
-            try:
-                run_command([
-                    pip_exe, "install", "torch", "torchvision", "torchaudio", 
-                    "--index-url", "https://download.pytorch.org/whl/cu124"
-                ], check=True)
-                print("PyTorch with CUDA installed successfully")
-            except Exception as e:
-                print(f"Warning: Could not install PyTorch with CUDA: {e}")
-                print("Falling back to CPU-only PyTorch...")
-                run_command([pip_exe, "install", "torch", "torchvision", "torchaudio"], check=True)
-                print("CPU-only PyTorch installed successfully")
+            # v2.0: PyTorch is NOT bundled anymore - bootstrap.py downloads GPU-appropriate version at runtime
+            print("Note: PyTorch will be installed at runtime by bootstrap.py based on detected GPU")
 
             # Install other requirements will be handled in separate checkpoint step below
         else:
@@ -384,16 +373,14 @@ def create_portable_python() -> None:
                 with open(os.path.join(conda_meta_dir, "pinned"), "a") as f:
                     f.write("libblas=*=*accelerate\n")
 
-                # Install PyTorch with MPS support
-                run_command(
-                    [pip_exe, "install", "torch>=2.1.0", "torchvision", "torchaudio"]
-                )
+                # v2.0: PyTorch is NOT bundled - bootstrap.py downloads appropriate version at runtime
+                print("Note: PyTorch will be installed at runtime by bootstrap.py based on detected GPU")
 
-                # Install other requirements
+                # Install other requirements (excluding torch which will be installed at runtime)
                 with open("requirements.txt", "r") as f:
                     requirements = f.read().splitlines()
 
-                # Filter out torch, torchvision, torchaudio as they're already installed
+                # Filter out torch, torchvision, torchaudio - they will be installed at runtime
                 # Also clean up requirements by removing comments and empty lines
                 filtered_requirements = []
                 for req in requirements:
@@ -408,7 +395,7 @@ def create_portable_python() -> None:
                     # Skip if it becomes empty after removing comments
                     if not req:
                         continue
-                    # Skip if it's one of the main torch packages we already installed
+                    # Skip torch packages - will be installed at runtime by bootstrap.py
                     req_name = req.lower().split('>=')[0].split('==')[0].split('~=')[0].split('<')[0].split('>')[0].strip()
                     if req_name in ("torch", "torchvision", "torchaudio"):
                         continue

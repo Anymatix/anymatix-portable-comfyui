@@ -67,37 +67,37 @@ jobs:
             anymatix-portable-comfyui-windows-*.tar.bz2
           if-no-files-found: warn
 
-  # build-linux:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v3
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
       
-  #     - name: Set up Python
-  #       uses: actions/setup-python@v4
-  #       with:
-  #         python-version: '3.13'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
           
-  #     - name: Install dependencies
-  #       run: |
-  #         python -m pip install --upgrade pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
           
-  #     - name: Build portable package
-  #       run: |
-  #         python create_portable_comfyui.py --ci
+      - name: Build portable package
+        run: |
+          python create_portable_comfyui.py --ci
           
-  #     - name: Get zip filename
-  #       id: get-zip-filename
-  #       run: |
-  #         echo "ZIP_FILE=$(ls anymatix-portable-comfyui-linux-*.zip)" >> $GITHUB_OUTPUT
-          
-  #     - name: Upload artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: anymatix-portable-comfyui-linux
-  #         path: ${{ steps.get-zip-filename.outputs.ZIP_FILE }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anymatix-portable-comfyui-linux
+          path: |
+            anymatix-portable-comfyui-linux-*.zip.part*
+            anymatix-portable-comfyui-linux-*.zip
+            anymatix-portable-comfyui-linux-*.tar.bz2.part*
+            anymatix-portable-comfyui-linux-*.tar.bz2
+          if-no-files-found: warn
 
   create-release:
-    needs: [build-macos, build-windows]
+    needs: [build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -163,6 +163,6 @@ jobs:
           files: |
             artifacts/anymatix-portable-comfyui-macos/*
             artifacts/anymatix-portable-comfyui-windows/*
-            # artifacts/anymatix-portable-comfyui-linux/*
+            artifacts/anymatix-portable-comfyui-linux/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
