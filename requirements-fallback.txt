@@ -24,3 +24,6 @@ pygit2
 matplotlib
 av==16.0.1
 opencv-python-headless
+
+# Added for comfyui_controlnet_aux and other nodes that require it
+scikit-image
