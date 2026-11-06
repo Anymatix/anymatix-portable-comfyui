@@ -55,6 +55,19 @@ jobs:
       - name: Build portable package
         run: |
           python create_portable_comfyui.py --ci
+
+      - name: Check python.exe is Authenticode-signed (Smart App Control)
+        shell: pwsh
+        run: |
+          foreach ($f in @("anymatix\python\python.exe", "anymatix\python\pythonw.exe", "anymatix\python\python313.dll", "anymatix\python\Lib\venv\scripts\nt\venvlauncher.exe")) {
+            $sig = Get-AuthenticodeSignature $f
+            Write-Host "$f : $($sig.Status) $($sig.SignerCertificate.Subject)"
+            if ($sig.Status -ne "Valid") { throw "$f is not validly signed" }
+          }
+          & anymatix\python\python.exe -m venv venv-check
+          $sig = Get-AuthenticodeSignature venv-check\Scripts\python.exe
+          Write-Host "venv python.exe : $($sig.Status)"
+          if ($sig.Status -ne "Valid") { throw "venv python.exe is not validly signed" }
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4

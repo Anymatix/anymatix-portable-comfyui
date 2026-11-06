@@ -29,6 +29,14 @@ COMFYUI_DIR = os.path.join(ANYMATIX_DIR, "ComfyUI")
 CUSTOM_NODES_DIR = os.path.join(COMFYUI_DIR, "custom_nodes")
 COMFYUI_REPO = "https://github.com/comfyanonymous/ComfyUI.git"
 MINIFORGE_BASE_URL = "https://github.com/conda-forge/miniforge/releases/latest/download"
+# Windows ships the official python.org build, Authenticode-signed by the Python
+# Software Foundation, not Miniforge: Smart App Control (Windows 11) refuses to
+# run Miniforge's unsigned python.exe, and every venv made from it inherits an
+# unsigned launcher (measured on sleipnir, 2026-11-06, Code Integrity 3077/3033).
+# The NuGet package is the python.org full build without an installer; its
+# tools/ folder is a complete, relocatable Python with pip via ensurepip.
+WINDOWS_PYTHON_VERSION = "3.13.11"
+WINDOWS_PYTHON_NUGET_URL = f"https://www.nuget.org/api/v2/package/python/{WINDOWS_PYTHON_VERSION}"
 CHECKPOINT_FILE = os.path.join(ANYMATIX_DIR, ".build_checkpoint")
 
 
@@ -268,6 +276,56 @@ def should_skip_step(current_step: str, last_completed: Optional[str]) -> bool:
         return False
 
 
+def install_official_python_windows() -> None:
+    """Unpack the signed python.org Python (NuGet package) into PYTHON_DIR."""
+    print(f"Downloading official Python {WINDOWS_PYTHON_VERSION} from {WINDOWS_PYTHON_NUGET_URL}...")
+    nupkg = f"python.{WINDOWS_PYTHON_VERSION}.nupkg"
+    urllib.request.urlretrieve(WINDOWS_PYTHON_NUGET_URL, nupkg)
+    if os.path.exists(PYTHON_DIR):
+        shutil.rmtree(PYTHON_DIR)
+    os.makedirs(PYTHON_DIR)
+    prefix = "tools/"
+    with zipfile.ZipFile(nupkg) as z:
+        for info in z.infolist():
+            if not info.filename.startswith(prefix) or info.is_dir():
+                continue
+            rel = info.filename[len(prefix):]
+            dest = os.path.join(PYTHON_DIR, *rel.split("/"))
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with z.open(info) as src, open(dest, "wb") as out:
+                shutil.copyfileobj(src, out)
+    os.remove(nupkg)
+    python_exe = os.path.join(PYTHON_DIR, "python.exe")
+    if not os.path.isfile(python_exe):
+        raise RuntimeError(f"python.exe missing after unpacking {nupkg}")
+    run_command([python_exe, "-c", "import sys, venv, ensurepip, ssl, sqlite3, ctypes; print(sys.version)"], check=True)
+    run_command([python_exe, "-m", "ensurepip", "--upgrade", "--default-pip"], check=True)
+    run_command([python_exe, "-m", "pip", "install", "--upgrade", "pip"], check=True)
+
+
+def install_base_requirements() -> None:
+    """Install requirements.txt (minus torch) into the portable Python."""
+    with open("requirements.txt", "r") as f:
+        lines = f.read().splitlines()
+    reqs = []
+    for req in lines:
+        req = req.split("#")[0].strip()
+        if not req:
+            continue
+        name = req.lower().split(">=")[0].split("==")[0].split("~=")[0].split("<")[0].split(">")[0].strip()
+        if name in ("torch", "torchvision", "torchaudio"):
+            continue
+        reqs.append(req)
+    if platform.system() == "Windows":
+        python_exe = os.path.join(PYTHON_DIR, "python.exe")
+    else:
+        python_exe = os.path.join(PYTHON_DIR, "bin", "python")
+    if reqs:
+        run_command([python_exe, "-m", "pip", "install"] + reqs, check=True)
+    verify_critical_packages("requirements installation")
+    save_checkpoint("install_requirements")
+
+
 def create_portable_python() -> None:
     """Create a portable Python environment using Miniforge."""
     last_checkpoint = load_checkpoint()
@@ -277,6 +335,15 @@ def create_portable_python() -> None:
     # Check if we should skip Python environment creation
     if should_skip_step("create_python", last_checkpoint):
         print("Skipping Python environment creation (already completed)")
+        return
+
+    if platform.system() == "Windows":
+        install_official_python_windows()
+        save_checkpoint("create_python")
+        save_checkpoint("install_pytorch")
+        install_base_requirements()
+        save_checkpoint("install_python")
+        print("Portable Python environment created successfully.")
         return
 
     # Download Miniforge installer
